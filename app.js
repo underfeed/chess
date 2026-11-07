@@ -4,6 +4,7 @@ import {
   boardToFen, boardProblem,
 } from './analysis.js';
 import { Engine } from './engine.js';
+import { pieceSvg } from './pieces.js';
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const GLYPH = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
@@ -75,7 +76,67 @@ function beep(freq) {
     o.stop(actx.currentTime + 0.09);
   } catch (e) { /* звук недоступен */ }
 }
-const playMoveSound = (capture) => beep(capture ? 300 : 520);
+// Деревянный «тук»: короткий шум через полосовой фильтр плюс глухой низкий тон.
+let noiseBuf = null;
+function woodClack(capture) {
+  if (!settings.sound) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const t = actx.currentTime;
+    if (!noiseBuf) {
+      noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.05), actx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 6);
+    }
+    const src = actx.createBufferSource();
+    src.buffer = noiseBuf;
+    const bp = actx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = capture ? 900 : 1600;
+    bp.Q.value = 3;
+    const g = actx.createGain();
+    g.gain.value = capture ? 0.9 : 0.7;
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(actx.destination);
+    src.start(t);
+
+    const o = actx.createOscillator();
+    const og = actx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(capture ? 260 : 380, t);
+    o.frequency.exponentialRampToValueAtTime(140, t + 0.06);
+    og.gain.setValueAtTime(0.35, t);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    o.connect(og);
+    og.connect(actx.destination);
+    o.start(t);
+    o.stop(t + 0.1);
+  } catch (e) { /* звук недоступен */ }
+}
+const playMoveSound = (capture) => woodClack(capture);
+
+// Положить «призрак» фигуры по центру pointer'а (без анимации).
+function placeGhost(x, y) {
+  const ghost = $('ghost');
+  ghost.style.transform = `translate(${x - ghost.offsetWidth / 2}px, ${y - ghost.offsetHeight / 2}px)`;
+}
+
+// Быстро доводит фигуру до клетки назначения и вызывает done.
+function glideGhost(sq, done) {
+  const ghost = $('ghost');
+  const r = $('board').getBoundingClientRect();
+  const size = r.width / 8;
+  const f = FILES.indexOf(sq[0]);
+  const rk = parseInt(sq[1], 10) - 1;
+  const col = G.flipped ? 7 - f : f;
+  const row = G.flipped ? rk : 7 - rk;
+  const x = r.left + col * size + (size - ghost.offsetWidth) / 2;
+  const y = r.top + row * size + (size - ghost.offsetHeight) / 2;
+  ghost.style.transition = 'transform 0.09s ease-out';
+  ghost.style.transform = `translate(${x}px, ${y}px)`;
+  setTimeout(done, 90);
+}
 function haptic() {
   try { if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light'); } catch (e) { /* нет */ }
 }
@@ -180,7 +241,7 @@ function renderBoard() {
       if (p && !(drag && drag.moved && sq === drag.from)) {
         const s = document.createElement('span');
         s.className = 'piece ' + p.color;
-        s.textContent = GLYPH[p.type] + VARIANT_TEXT;
+        s.innerHTML = pieceSvg(p.type, p.color);
         div.appendChild(s);
       }
       if (targets.includes(sq)) {
@@ -264,7 +325,7 @@ function askPromotion(color) {
     box.innerHTML = '';
     for (const t of ['q', 'r', 'b', 'n']) {
       const b = document.createElement('button');
-      b.textContent = GLYPH[t] + VARIANT_TEXT;
+      b.innerHTML = pieceSvg(t, color);
       b.style.background = '#cbbf9f';
       b.style.color = color === 'w' ? '#fffdf6' : '#1e1c1a';
       b.style.textShadow = color === 'w' ? '0 0 2px #000, 0 0 2px #000' : 'none';
@@ -340,7 +401,7 @@ function buildPalette() {
       const b = document.createElement('button');
       b.className = `pbtn ${color}`;
       b.dataset.tool = color + type;
-      b.textContent = GLYPH[type] + VARIANT_TEXT;
+      b.innerHTML = pieceSvg(type, color);
       b.onclick = () => { if (editor) { editor.tool = editor.tool === b.dataset.tool ? null : b.dataset.tool; renderPalette(); } };
       box.appendChild(b);
     }
@@ -980,11 +1041,17 @@ function bindUi() {
       ghost.style.height = size + 'px';
       ghost.style.fontSize = size * 0.82 + 'px';
       ghost.className = 'piece ' + drag.piece.color;
-      ghost.textContent = GLYPH[drag.piece.type] + VARIANT_TEXT;
+      ghost.innerHTML = pieceSvg(drag.piece.type, drag.piece.color);
       ghost.style.display = 'flex';
+      ghost.style.transition = 'none';
+      placeGhost(e.clientX, e.clientY);
+      void ghost.offsetWidth; // фиксируем стартовую позицию без «полёта» из угла
+      ghost.style.transition = '';
       renderBoard();
+      e.preventDefault();
+      return;
     }
-    ghost.style.transform = `translate(${e.clientX - ghost.offsetWidth / 2}px, ${e.clientY - ghost.offsetHeight / 2}px)`;
+    placeGhost(e.clientX, e.clientY);
     e.preventDefault();
   });
 
@@ -993,12 +1060,16 @@ function bindUi() {
     const d = drag;
     drag = null;
     if (d.moved) {
-      ghost.style.display = 'none';
       const to = cancelled ? null : squareAt(e.clientX, e.clientY);
       if (to && to !== d.from && targets.includes(to)) {
-        tryMove(d.from, to);
+        glideGhost(to, () => {
+          ghost.style.display = 'none';
+          ghost.style.transition = '';
+          tryMove(d.from, to);
+        });
         return;
       }
+      ghost.style.display = 'none';
       selected = d.from;
       renderBoard();
       return;

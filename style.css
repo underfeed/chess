@@ -243,6 +243,13 @@ textarea { min-height: 96px; resize: vertical; }
 
 /* Перетаскивание и раскладка */
 #board { touch-action: none; }
+
+/* Фигуры SVG */
+.piece { width: 88%; height: 88%; display: flex; align-items: center; justify-content: center; }
+.piece svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)); }
+#ghost { transition: transform 0.05s linear; }
+.pbtn svg { width: 40px; height: 40px; display: block; margin: 0 auto; }
+#promo button svg { width: 52px; height: 52px; display: block; }
 #ghost {
   position: fixed; left: 0; top: 0; display: none;
   align-items: center; justify-content: center;
