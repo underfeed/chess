@@ -77,42 +77,47 @@ function beep(freq) {
     o.stop(actx.currentTime + 0.09);
   } catch (e) { /* звук недоступен */ }
 }
-// Деревянный «тук»: короткий шум через полосовой фильтр плюс глухой низкий тон.
-let noiseBuf = null;
+
+// Настоящий глухой «тук» дерева по полой деревянной доске:
+// Убираем чистые тона (синусоиды), используем физическое моделирование двухрезонансного деревянного удара
 function woodClack(capture) {
   if (!settings.sound) return;
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     const t = actx.currentTime;
-    if (!noiseBuf) {
-      noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.06), actx.sampleRate);
-      const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 5);
+    const duration = capture ? 0.06 : 0.045;
+    
+    // 1. Шум атаки (удар сукна/сухого дерева)
+    const bufferSize = Math.floor(actx.sampleRate * duration);
+    const noiseBuffer = actx.createBuffer(1, bufferSize, actx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      // Спад огибающей атаки с резким затуханием
+      output[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, capture ? 3.5 : 4.5);
     }
-    const src = actx.createBufferSource();
-    src.buffer = noiseBuf;
-    const bp = actx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = capture ? 750 : 950; // Снижено для более плотного деревянного отклика
-    bp.Q.value = 3.5;                         // Добавлено резонанса для характерного «деревянного» окраса
-    const g = actx.createGain();
-    g.gain.value = capture ? 0.95 : 0.8;
-    src.connect(bp);
-    bp.connect(g);
-    g.connect(actx.destination);
-    src.start(t);
+    const noise = actx.createBufferSource();
+    noise.buffer = noiseBuffer;
 
-    const o = actx.createOscillator();
-    const og = actx.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(capture ? 190 : 230, t); // Более низкие, глубокие частоты корпуса доски
-    o.frequency.exponentialRampToValueAtTime(85, t + 0.08);
-    og.gain.setValueAtTime(0.45, t);
-    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
-    o.connect(og);
-    og.connect(actx.destination);
-    o.start(t);
-    o.stop(t + 0.12);
+    // 2. Двойной фильтр деревянного корпуса доски (низкий резонанс короба + глухой стук основы)
+    const f1 = actx.createBiquadFilter();
+    f1.type = 'bandpass';
+    f1.frequency.value = capture ? 320 : 420; // Глухой резонатор доски
+    f1.Q.value = 2.2;
+
+    const f2 = actx.createBiquadFilter();
+    f2.type = 'lowpass';
+    f2.frequency.value = capture ? 900 : 1200; // Срезаем всё электро-свистящее верхнее звучание
+
+    const mainGain = actx.createGain();
+    mainGain.gain.setValueAtTime(capture ? 1.0 : 0.75, t);
+    mainGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    noise.connect(f1);
+    f1.connect(f2);
+    f2.connect(mainGain);
+    mainGain.connect(actx.destination);
+
+    noise.start(t);
   } catch (e) { /* звук недоступен */ }
 }
 const playMoveSound = (capture) => woodClack(capture);
@@ -904,7 +909,9 @@ function resetGame(startFen, sans, ucis, fens, headers) {
 }
 
 function loadPgnText(raw) {
-  const first = raw.trim().split(/\n\s*\n(?=\[)/)[0];
+  const first = raw.trim().split(/
+\s*
+(?=\[)/)[0];
   if (!first) throw new Error('пусто');
   const c = new Chess();
   c.loadPgn(first);
@@ -918,7 +925,9 @@ function loadPgnText(raw) {
     [startFen, ...hist.map((m) => m.after)],
     c.header(),
   );
-  if (raw.trim().split(/\n\s*\n(?=\[)/).length > 1) toast('В тексте несколько партий, загружена первая');
+  if (raw.trim().split(/
+\s*
+(?=\[)/).length > 1) toast('В тексте несколько партий, загружена первая');
   else toast('Партия загружена');
 }
 
@@ -970,7 +979,8 @@ async function lichessUserGames(name) {
   if (!r.ok) throw new Error('Lichess ответил ' + r.status);
   const text = (await r.text()).trim();
   if (!text) return [];
-  return text.split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((g) => g.pgn).map((g) => {
+  return text.split('
+').filter(Boolean).map((l) => JSON.parse(l)).filter((g) => g.pgn).map((g) => {
     const w = (g.players && g.players.white && g.players.white.user && g.players.white.user.name) || 'Аноним';
     const b = (g.players && g.players.black && g.players.black.user && g.players.black.user.name) || 'Аноним';
     const res = g.winner === 'white' ? '1–0' : g.winner === 'black' ? '0–1' : (g.status === 'draw' || g.status === 'stalemate') ? '½–½' : '—';
@@ -1182,7 +1192,7 @@ const BOOK_BASE = 'https://raw.githubusercontent.com/lichess-org/chess-openings/
 const bookPromise = Promise.all(['a', 'b', 'c', 'd', 'e'].map((l) => fetch(`${BOOK_BASE}${l}.tsv`).then((r) => {
   if (!r.ok) throw new Error('book');
   return r.text();
-}))).then((texts) => { book = buildBook(texts); renderOpening(); renderComments(); return book; }).catch(() => null);
+}))).then((texts) => { book = book ? book : buildBook(texts); renderOpening(); renderComments(); return book; }).catch(() => null);
 
 buildCats();
 buildPalette();
