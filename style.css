@@ -171,7 +171,13 @@ button.primary { background: var(--accent); color: #10200a; font-weight: 600; }
 
 #cats { display: flex; flex-direction: column; gap: 2px; }
 .catrow { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; }
-.catrow .cnt { background: transparent; padding: 6px 0; font-size: 16px; font-weight: 700; text-align: center; }
+.catrow .cnt {
+  background: transparent;
+  padding: 6px 0;
+  font-size: 20px; /* Увеличили размер цифр */
+  font-weight: 700;
+  text-align: center;
+}
 .catrow .cnt.zero { opacity: 0.55; }
 .catname { display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 16px; }
 .badge {
