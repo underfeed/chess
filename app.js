@@ -77,42 +77,43 @@ function beep(freq) {
     o.stop(actx.currentTime + 0.09);
   } catch (e) { /* звук недоступен */ }
 }
-// Деревянный «тук»: короткий шум через полосовой фильтр плюс глухой низкий тон.
+// Мягкий и глубокий деревянный стук (чистое перкуссионное моделирование без электронных синтезаторных тонов)
 let noiseBuf = null;
 function woodClack(capture) {
   if (!settings.sound) return;
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     const t = actx.currentTime;
+    const dur = capture ? 0.07 : 0.05;
     if (!noiseBuf) {
-      noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.05), actx.sampleRate);
+      noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.08), actx.sampleRate);
       const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 6);
+      for (let i = 0; i < d.length; i++) {
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3.5);
+      }
     }
     const src = actx.createBufferSource();
     src.buffer = noiseBuf;
+    
+    // Плотный полосовой фильтр для глухого деревянного резонанса доски
     const bp = actx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.value = capture ? 900 : 1600;
-    bp.Q.value = 3;
+    bp.frequency.value = capture ? 380 : 480;
+    bp.Q.value = 2.0;
+
+    const lp = actx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 1400; // отсекаем любые резкие и звенящие частоты
+
     const g = actx.createGain();
-    g.gain.value = capture ? 0.9 : 0.7;
+    g.gain.setValueAtTime(capture ? 1.0 : 0.8, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
     src.connect(bp);
-    bp.connect(g);
+    bp.connect(lp);
+    lp.connect(g);
     g.connect(actx.destination);
     src.start(t);
-
-    const o = actx.createOscillator();
-    const og = actx.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(capture ? 260 : 380, t);
-    o.frequency.exponentialRampToValueAtTime(140, t + 0.06);
-    og.gain.setValueAtTime(0.35, t);
-    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
-    o.connect(og);
-    og.connect(actx.destination);
-    o.start(t);
-    o.stop(t + 0.1);
   } catch (e) { /* звук недоступен */ }
 }
 const playMoveSound = (capture) => woodClack(capture);
