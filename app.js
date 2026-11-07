@@ -99,7 +99,7 @@ function woodClack(capture) {
     }
     const src = actx.createBufferSource();
     src.buffer = noiseBuf;
-    
+
     // Низкая частота резонатора для брутального тела
     const bp = actx.createBiquadFilter();
     bp.type = 'bandpass';
@@ -234,6 +234,7 @@ function renderBoard() {
   const lastUci = !editor && G.ply > 0 ? G.ucis[G.ply - 1] : null;
   const last = lastUci ? { from: lastUci.slice(0, 2), to: lastUci.slice(2, 4) } : null;
   const kingInCheck = !editor && c.inCheck() ? findKing(c, c.turn()) : null;
+  const rv = !editor && review && G.ply > 0 ? review.moves[G.ply - 1] : null;
   if (rv && last && sq === last.to) {
         const cat = CAT_BY_KEY[rv.cat];
         const bdg = document.createElement('span');
