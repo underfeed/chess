@@ -258,7 +258,7 @@ textarea { min-height: 96px; resize: vertical; }
 #promo button svg { width: 52px; height: 52px; display: block; }
 
 /* Значки категорий: иконка по центру круга */
-.badge svg { width: 15px; height: 15px; display: block; }
+.badge svg { width: 16px; height: 16px; display: block; }
 .mb svg { width: 10px; height: 10px; display: block; }
 .sqbadge svg { width: 11px; height: 11px; display: block; }
 .mb { display: inline-flex; align-items: center; justify-content: center; }
