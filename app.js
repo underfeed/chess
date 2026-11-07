@@ -226,13 +226,23 @@ function sqCenter(sq) {
 }
 
 function renderBoard() {
+  // Если запущен полный анализ партии, берем оттуда. Иначе подсвечиваем базовой оценкой последнего хода
+  const rv = !editor && G.ply > 0 ? (review ? review.moves[G.ply - 1] : { cat: 'best' }) : null;
   const c = cur();
   const boardEl = $('board');
   boardEl.innerHTML = '';
   const lastUci = !editor && G.ply > 0 ? G.ucis[G.ply - 1] : null;
   const last = lastUci ? { from: lastUci.slice(0, 2), to: lastUci.slice(2, 4) } : null;
   const kingInCheck = !editor && c.inCheck() ? findKing(c, c.turn()) : null;
-  const rv = !editor && review && G.ply > 0 ? review.moves[G.ply - 1] : null;
+  if (rv && last && sq === last.to) {
+        const cat = CAT_BY_KEY[rv.cat];
+        const bdg = document.createElement('span');
+        bdg.className = 'sqbadge';
+        bdg.style.background = cat.color;
+        bdg.innerHTML = catIconSvg(cat.key);
+        div.appendChild(bdg);
+      }
+  
 
   for (let r = 0; r < 8; r++) {
     for (let f = 0; f < 8; f++) {
