@@ -5,6 +5,7 @@ import {
 } from './analysis.js';
 import { Engine } from './engine.js';
 import { pieceSvg } from './pieces.js';
+import { catIconSvg } from './icons.js';
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const GLYPH = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
@@ -266,7 +267,7 @@ function renderBoard() {
         const bdg = document.createElement('span');
         bdg.className = 'sqbadge';
         bdg.style.background = cat.color;
-        bdg.textContent = cat.sym;
+        bdg.innerHTML = catIconSvg(cat.key);
         div.appendChild(bdg);
       }
       boardEl.appendChild(div);
@@ -590,7 +591,7 @@ function buildCats() {
     const badge = document.createElement('span');
     badge.className = 'badge';
     badge.style.background = c.color;
-    badge.textContent = c.sym;
+    badge.innerHTML = catIconSvg(c.key);
     name.appendChild(badge);
     name.appendChild(document.createTextNode(c.label));
     const b = document.createElement('button');
@@ -668,7 +669,7 @@ function renderMoves() {
         const mb = document.createElement('span');
         mb.className = 'mb';
         mb.style.background = cat.color;
-        mb.textContent = cat.sym;
+        mb.innerHTML = catIconSvg(cat.key);
         b.appendChild(mb);
       }
     }
@@ -719,7 +720,7 @@ function renderComments() {
     const badge = document.createElement('span');
     badge.className = 'badge';
     badge.style.background = cat.color;
-    badge.textContent = cat.sym;
+    badge.innerHTML = catIconSvg(cat.key);
     const t = document.createElement('div');
     t.className = 't';
     const head = document.createElement('b');

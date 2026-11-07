@@ -250,6 +250,12 @@ textarea { min-height: 96px; resize: vertical; }
 #ghost { transition: transform 0.05s linear; }
 .pbtn svg { width: 40px; height: 40px; display: block; margin: 0 auto; }
 #promo button svg { width: 52px; height: 52px; display: block; }
+
+/* Значки категорий: иконка по центру круга */
+.badge svg { width: 15px; height: 15px; display: block; }
+.mb svg { width: 10px; height: 10px; display: block; }
+.sqbadge svg { width: 11px; height: 11px; display: block; }
+.mb { display: inline-flex; align-items: center; justify-content: center; }
 #ghost {
   position: fixed; left: 0; top: 0; display: none;
   align-items: center; justify-content: center;
