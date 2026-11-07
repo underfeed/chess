@@ -85,18 +85,18 @@ function woodClack(capture) {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     const t = actx.currentTime;
     if (!noiseBuf) {
-      noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.06), actx.sampleRate);
+      noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.05), actx.sampleRate);
       const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 5);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 6);
     }
     const src = actx.createBufferSource();
     src.buffer = noiseBuf;
     const bp = actx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.value = capture ? 750 : 950; // Снижено для более плотного деревянного отклика
-    bp.Q.value = 3.5;                         // Добавлено резонанса для характерного «деревянного» окраса
+    bp.frequency.value = capture ? 900 : 1600;
+    bp.Q.value = 3;
     const g = actx.createGain();
-    g.gain.value = capture ? 0.95 : 0.8;
+    g.gain.value = capture ? 0.9 : 0.7;
     src.connect(bp);
     bp.connect(g);
     g.connect(actx.destination);
@@ -105,14 +105,14 @@ function woodClack(capture) {
     const o = actx.createOscillator();
     const og = actx.createGain();
     o.type = 'sine';
-    o.frequency.setValueAtTime(capture ? 190 : 230, t); // Более низкие, глубокие частоты корпуса доски
-    o.frequency.exponentialRampToValueAtTime(85, t + 0.08);
-    og.gain.setValueAtTime(0.45, t);
-    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+    o.frequency.setValueAtTime(capture ? 260 : 380, t);
+    o.frequency.exponentialRampToValueAtTime(140, t + 0.06);
+    og.gain.setValueAtTime(0.35, t);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
     o.connect(og);
     og.connect(actx.destination);
     o.start(t);
-    o.stop(t + 0.12);
+    o.stop(t + 0.1);
   } catch (e) { /* звук недоступен */ }
 }
 const playMoveSound = (capture) => woodClack(capture);
