@@ -78,8 +78,6 @@ function beep(freq) {
   } catch (e) { /* звук недоступен */ }
 }
 // Мягкий и глубокий деревянный стук (чистое перкуссионное моделирование без электронных синтезаторных тонов)
-// Яркий деревянный стук с акцентом на щелчок доски и срезом лишних высоких частот
-// Плотный, грубый и собранный деревянный стук без «песочного» шуршания
 // Максимально плотный, ударный и монолитный деревянный стук (без шуршания и рассыпчатости)
 let noiseBuf = null;
 function woodClack(capture) {
@@ -99,7 +97,7 @@ function woodClack(capture) {
     }
     const src = actx.createBufferSource();
     src.buffer = noiseBuf;
-
+    
     // Низкая частота резонатора для брутального тела
     const bp = actx.createBiquadFilter();
     bp.type = 'bandpass';
@@ -226,8 +224,6 @@ function sqCenter(sq) {
 }
 
 function renderBoard() {
-  // Если запущен полный анализ партии, берем оттуда. Иначе подсвечиваем базовой оценкой последнего хода
-  const rv = !editor && G.ply > 0 ? (review ? review.moves[G.ply - 1] : { cat: 'best' }) : null;
   const c = cur();
   const boardEl = $('board');
   boardEl.innerHTML = '';
@@ -235,15 +231,6 @@ function renderBoard() {
   const last = lastUci ? { from: lastUci.slice(0, 2), to: lastUci.slice(2, 4) } : null;
   const kingInCheck = !editor && c.inCheck() ? findKing(c, c.turn()) : null;
   const rv = !editor && review && G.ply > 0 ? review.moves[G.ply - 1] : null;
-  if (rv && last && sq === last.to) {
-        const cat = CAT_BY_KEY[rv.cat];
-        const bdg = document.createElement('span');
-        bdg.className = 'sqbadge';
-        bdg.style.background = cat.color;
-        bdg.innerHTML = catIconSvg(cat.key);
-        div.appendChild(bdg);
-      }
-  
 
   for (let r = 0; r < 8; r++) {
     for (let f = 0; f < 8; f++) {
