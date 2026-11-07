@@ -240,3 +240,26 @@ textarea { min-height: 96px; resize: vertical; }
   opacity: 0; pointer-events: none; transition: all 0.2s; z-index: 30; max-width: 90%; text-align: center;
 }
 #toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* Перетаскивание и раскладка */
+#board { touch-action: none; }
+#ghost {
+  position: fixed; left: 0; top: 0; display: none;
+  align-items: center; justify-content: center;
+  pointer-events: none; z-index: 50; will-change: transform;
+  line-height: 1;
+}
+#movelist, #commentlist { position: relative; }
+
+#layout { display: flex; flex-direction: column; gap: 10px; }
+#main, #side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+@media (min-width: 900px) {
+  #app { max-width: 1180px; }
+  #layout { flex-direction: row; align-items: flex-start; gap: 16px; }
+  #main { flex: 1 1 0; }
+  #boardwrap { max-width: min(100%, 78vh); width: 100%; margin: 0 auto; }
+  #side { width: 380px; flex: none; position: sticky; top: 10px; }
+  #movelist { max-height: calc(100vh - 430px); min-height: 160px; }
+  #commentlist { max-height: calc(100vh - 380px); }
+}

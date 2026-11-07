@@ -42,6 +42,7 @@ let reviewRunning = false;
 let reviewToken = 0;
 let liveTimer = null;
 let editor = null; // состояние редактора позиции, null когда он закрыт
+let drag = null; // перетаскивание фигуры: {sq, from, piece, moved, x0, y0}
 const engine = new Engine();
 
 const cur = () => new Chess(G.fens[G.ply]);
@@ -176,7 +177,7 @@ function renderBoard() {
       if (sq === selected) div.classList.add('sel');
       if (sq === kingInCheck) div.classList.add('check');
       const p = editor ? editor.board.get(sq) : c.get(sq);
-      if (p) {
+      if (p && !(drag && drag.moved && sq === drag.from)) {
         const s = document.createElement('span');
         s.className = 'piece ' + p.color;
         s.textContent = GLYPH[p.type] + VARIANT_TEXT;
@@ -433,7 +434,6 @@ function editorDone() {
     return;
   }
   loadFen(fen);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
   toast('Позиция установлена');
 }
 
@@ -566,6 +566,12 @@ function jumpToCat(key, side) {
 }
 
 /* ---------- Список ходов, комментарии, график ---------- */
+// Прокручивает только внутри своего списка, страницу не трогает.
+function keepInView(box, el) {
+  if (!el || box.style.display === 'none') return;
+  box.scrollTop = Math.max(0, el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2);
+}
+
 function plyNumber(i) {
   const startNo = parseInt(G.fens[0].split(' ')[5], 10) || 1;
   const startBlack = turnOf(G.fens[0]) === 'b';
@@ -608,8 +614,7 @@ function renderMoves() {
     b.onclick = () => goTo(i + 1);
     box.appendChild(b);
   });
-  const curBtn = box.querySelector('.mv.cur');
-  if (curBtn) curBtn.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  keepInView(box, box.querySelector('.mv.cur'));
 }
 
 function commentText(i) {
@@ -665,8 +670,7 @@ function renderComments() {
     row.onclick = () => goTo(i + 1);
     box.appendChild(row);
   });
-  const curRow = box.querySelector('.crow.cur');
-  if (curRow && box.style.display !== 'none') curRow.scrollIntoView({ block: 'nearest' });
+  keepInView(box, box.querySelector('.crow.cur'));
 }
 
 function renderGraph() {
@@ -760,6 +764,19 @@ async function runReview() {
   const second = new Array(n).fill(null);
   const bests = new Array(n).fill(null);
   let cancelled = false;
+  await Promise.race([bookPromise, new Promise((r) => setTimeout(r, 1500))]);
+  const sacrifice = G.ucis.map((u, i) => detectSacrifice(G.fens[i], u));
+  const bookFlags = G.ucis.map((u, i) => !!(book && G.startFen === START_FEN && book.prefixes.has(G.sans.slice(0, i + 1).join(' '))));
+  // Промежуточный итог: ходы 0..upto-1 уже разобраны, поэтому позиции 0..upto известны.
+  const partial = (upto) => buildReview({
+    scores: scores.slice(0, upto + 1),
+    second: second.slice(0, upto + 1),
+    bests: bests.slice(0, upto + 1),
+    playedUcis: G.ucis.slice(0, upto),
+    startTurn: turnOf(G.fens[0]),
+    sacrifice: sacrifice.slice(0, upto),
+    book: bookFlags.slice(0, upto),
+  });
 
   for (let i = 0; i < n; i++) {
     if (token !== reviewToken) { cancelled = true; break; }
@@ -778,6 +795,12 @@ async function runReview() {
       }
     }
     setProgress((i + 1) / n);
+    if (i >= 1 && token === reviewToken) {
+      // Обновляем счётчики и подсветку ходов по мере разбора
+      review = partial(i);
+      renderPanel();
+      renderMoves();
+    }
   }
 
   if (!cancelled) {
@@ -791,6 +814,7 @@ async function runReview() {
   reviewRunning = false;
   setProgress(0);
   $('progress').classList.remove('on');
+  if (cancelled) review = null;
   renderAll();
   requestLive();
   if (cancelled) toast('Анализ остановлен');
@@ -842,7 +866,7 @@ function loadFen(fen) {
 }
 
 function safeLoad(fn) {
-  try { fn(); window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { toast('Не удалось загрузить: ' + (e.message || e)); }
+  try { fn(); } catch (e) { toast('Не удалось загрузить: ' + (e.message || e)); }
 }
 
 function renderGameList(items) {
@@ -919,10 +943,70 @@ async function withBusy(btn, fn) {
 
 /* ---------- Подключение кнопок ---------- */
 function bindUi() {
-  $('board').addEventListener('click', (e) => {
+  const boardEl = $('board');
+  const ghost = $('ghost');
+  const squareAt = (x, y) => {
+    const el = document.elementFromPoint(x, y);
+    const s = el && el.closest ? el.closest('[data-sq]') : null;
+    return s ? s.dataset.sq : null;
+  };
+
+  boardEl.addEventListener('pointerdown', (e) => {
     const el = e.target.closest('[data-sq]');
-    if (el) onSquare(el.dataset.sq);
+    if (!el) return;
+    const sq = el.dataset.sq;
+    drag = { sq, from: null, piece: null, moved: false, x0: e.clientX, y0: e.clientY };
+    if (!editor) {
+      const c = cur();
+      const p = c.get(sq);
+      if (p && p.color === c.turn() && !c.isGameOver()) {
+        drag.from = sq;
+        drag.piece = p;
+        selected = sq;
+        targets = c.moves({ square: sq, verbose: true }).map((m) => m.to);
+        renderBoard();
+      }
+    }
+    try { boardEl.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
   });
+
+  boardEl.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    if (!drag.moved) {
+      if (!drag.from || Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
+      drag.moved = true;
+      const size = boardEl.getBoundingClientRect().width / 8;
+      ghost.style.width = size + 'px';
+      ghost.style.height = size + 'px';
+      ghost.style.fontSize = size * 0.82 + 'px';
+      ghost.className = 'piece ' + drag.piece.color;
+      ghost.textContent = GLYPH[drag.piece.type] + VARIANT_TEXT;
+      ghost.style.display = 'flex';
+      renderBoard();
+    }
+    ghost.style.transform = `translate(${e.clientX - ghost.offsetWidth / 2}px, ${e.clientY - ghost.offsetHeight / 2}px)`;
+    e.preventDefault();
+  });
+
+  const finishDrag = (e, cancelled) => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    if (d.moved) {
+      ghost.style.display = 'none';
+      const to = cancelled ? null : squareAt(e.clientX, e.clientY);
+      if (to && to !== d.from && targets.includes(to)) {
+        tryMove(d.from, to);
+        return;
+      }
+      selected = d.from;
+      renderBoard();
+      return;
+    }
+    if (!cancelled) onSquare(d.sq);
+  };
+  boardEl.addEventListener('pointerup', (e) => finishDrag(e, false));
+  boardEl.addEventListener('pointercancel', (e) => finishDrag(e, true));
   $('nav-start').onclick = () => goTo(0);
   $('nav-prev').onclick = () => goTo(G.ply - 1);
   $('nav-next').onclick = () => goTo(G.ply + 1);
@@ -949,7 +1033,6 @@ function bindUi() {
   $('btn-review').onclick = runReview;
   $('btn-comments').onclick = () => {
     showTab('comments');
-    $('moves-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (!review) toast('Сначала нажмите «Анализ партии»');
   };
 
@@ -987,7 +1070,7 @@ function bindUi() {
     const v = $('li-input').value.trim();
     if (!v) return;
     const m = v.match(/lichess\.org\/(?:embed\/)?([A-Za-z0-9]{8})/);
-    if (m) { await loadLichessGame(m[1]); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (m) { await loadLichessGame(m[1]); return; }
     if (/^https?:\/\//i.test(v)) throw new Error('это не ссылка на партию Lichess');
     renderGameList(await lichessUserGames(v));
   });

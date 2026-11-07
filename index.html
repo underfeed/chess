@@ -12,138 +12,145 @@
   <h1>Шахматный анализатор</h1>
   <div id="gameinfo"></div>
 
-  <div id="boardwrap">
-    <div id="evalbar"><div id="evalfill"></div></div>
-    <div id="board-container">
-      <div id="board"></div>
-      <svg id="arrows" viewBox="0 0 8 8" preserveAspectRatio="none"></svg>
-    </div>
-  </div>
-
-  <div id="statusline"></div>
-  <div id="opening"></div>
-
-  <div id="nav">
-    <button id="nav-start" aria-label="В начало">«</button>
-    <button id="nav-prev" aria-label="Назад">‹</button>
-    <button id="nav-next" aria-label="Вперёд">›</button>
-    <button id="nav-end" aria-label="В конец">»</button>
-  </div>
-  <div id="nav2">
-    <button id="btn-flip">Перевернуть</button>
-    <button id="btn-reset">Новая доска</button>
-    <button id="btn-editor">Редактор</button>
-  </div>
-
-  <section class="card" id="editor" style="display:none">
-    <div id="palette"></div>
-    <div class="tabs" style="margin-top:10px">
-      <button id="turn-w" class="on">Ход белых</button>
-      <button id="turn-b">Ход чёрных</button>
-    </div>
-    <div id="castles">
-      <label><input type="checkbox" id="castle-K"> O-O белых</label>
-      <label><input type="checkbox" id="castle-Q"> O-O-O белых</label>
-      <label><input type="checkbox" id="castle-k"> O-O чёрных</label>
-      <label><input type="checkbox" id="castle-q"> O-O-O чёрных</label>
-    </div>
-    <p class="hint">Выберите фигуру и нажимайте на клетки. Повторное нажатие той же фигурой убирает её. Рокировка учитывается, только если король и ладья стоят на своих местах.</p>
-    <div class="row">
-      <button id="ed-clear">Очистить</button>
-      <button id="ed-start">Начальная</button>
-    </div>
-    <div class="row">
-      <button id="ed-cancel">Отмена</button>
-      <button id="ed-done" class="primary">Готово</button>
-    </div>
-  </section>
-
-  <section class="card" id="enginecard">
-    <div id="evalnum">—</div>
-    <div id="enginemeta">
-      <div id="enginename">Stockfish</div>
-      <div id="depthrow">
-        <span>Глубина: <span id="depthval">14</span></span>
-        <button id="depth-minus" aria-label="Меньше">−</button>
-        <button id="depth-plus" aria-label="Больше">+</button>
+  <div id="layout">
+    <div id="main">
+      <div id="boardwrap">
+        <div id="evalbar"><div id="evalfill"></div></div>
+        <div id="board-container">
+          <div id="board"></div>
+          <svg id="arrows" viewBox="0 0 8 8" preserveAspectRatio="none"></svg>
+        </div>
       </div>
-    </div>
-    <button id="live-toggle" class="switch on" aria-label="Анализ в реальном времени"></button>
-  </section>
 
-  <section class="card" id="linescard">
-    <div id="lines"><span class="muted">Лучшие линии появятся здесь.</span></div>
-  </section>
+      <div id="statusline"></div>
+      <div id="opening"></div>
 
-  <section class="card">
-    <div id="accrow">
-      <div class="accbox w" id="acc-w">0%</div>
-      <div id="acclabel">Точность</div>
-      <div class="accbox b" id="acc-b">0%</div>
-    </div>
-    <div id="cats" style="margin-top:12px"></div>
-    <div id="progress"><div id="progressbar"></div></div>
-    <div class="actions" style="margin-top:12px">
-      <button id="btn-review" class="primary wide">Анализ партии</button>
-      <button id="btn-comments" class="btn-outline">К комментариям →</button>
-      <button id="btn-sound" class="btn-outline">Звук: вкл</button>
-    </div>
-  </section>
-
-  <section class="card" id="graph-card" style="display:none">
-    <svg id="graph" viewBox="0 0 300 70" preserveAspectRatio="none"></svg>
-  </section>
-
-  <section class="card" id="moves-card">
-    <div class="tabs">
-      <button id="tab-moves" class="on">Ходы</button>
-      <button id="tab-comments">Комментарии</button>
-    </div>
-    <div id="movelist"></div>
-    <div id="commentlist" style="display:none"></div>
-  </section>
-
-  <section class="card" id="import">
-    <div class="tabs">
-      <button data-imp="pgn" class="on">PGN</button>
-      <button data-imp="lichess">Lichess</button>
-      <button data-imp="chesscom">Chess.com</button>
-      <button data-imp="fen">FEN</button>
-    </div>
-
-    <div class="imp on" id="imp-pgn">
-      <textarea id="pgn-text" placeholder="Вставьте PGN партии"></textarea>
-      <div class="row">
-        <button id="pgn-load" class="primary">Загрузить</button>
-        <button id="pgn-file-btn">Файл .pgn</button>
+      <div id="nav">
+        <button id="nav-start" aria-label="В начало">«</button>
+        <button id="nav-prev" aria-label="Назад">‹</button>
+        <button id="nav-next" aria-label="Вперёд">›</button>
+        <button id="nav-end" aria-label="В конец">»</button>
       </div>
-      <input id="pgn-file" type="file" accept=".pgn,.txt" hidden>
+      <div id="nav2">
+        <button id="btn-flip">Перевернуть</button>
+        <button id="btn-reset">Новая доска</button>
+        <button id="btn-editor">Редактор</button>
+      </div>
+
+      <section class="card" id="editor" style="display:none">
+        <div id="palette"></div>
+        <div class="tabs" style="margin-top:10px">
+          <button id="turn-w" class="on">Ход белых</button>
+          <button id="turn-b">Ход чёрных</button>
+        </div>
+        <div id="castles">
+          <label><input type="checkbox" id="castle-K"> O-O белых</label>
+          <label><input type="checkbox" id="castle-Q"> O-O-O белых</label>
+          <label><input type="checkbox" id="castle-k"> O-O чёрных</label>
+          <label><input type="checkbox" id="castle-q"> O-O-O чёрных</label>
+        </div>
+        <p class="hint">Выберите фигуру и нажимайте на клетки. Повторное нажатие той же фигурой убирает её. Рокировка учитывается, только если король и ладья стоят на своих местах.</p>
+        <div class="row">
+          <button id="ed-clear">Очистить</button>
+          <button id="ed-start">Начальная</button>
+        </div>
+        <div class="row">
+          <button id="ed-cancel">Отмена</button>
+          <button id="ed-done" class="primary">Готово</button>
+        </div>
+      </section>
+
+      <section class="card" id="enginecard">
+        <div id="evalnum">—</div>
+        <div id="enginemeta">
+          <div id="enginename">Stockfish</div>
+          <div id="depthrow">
+            <span>Глубина: <span id="depthval">14</span></span>
+            <button id="depth-minus" aria-label="Меньше">−</button>
+            <button id="depth-plus" aria-label="Больше">+</button>
+          </div>
+        </div>
+        <button id="live-toggle" class="switch on" aria-label="Анализ в реальном времени"></button>
+      </section>
+
+      <section class="card" id="linescard">
+        <div id="lines"><span class="muted">Лучшие линии появятся здесь.</span></div>
+      </section>
+
+      <section class="card" id="graph-card" style="display:none">
+        <svg id="graph" viewBox="0 0 300 70" preserveAspectRatio="none"></svg>
+      </section>
+
+      <section class="card" id="import">
+        <div class="tabs">
+          <button data-imp="pgn" class="on">PGN</button>
+          <button data-imp="lichess">Lichess</button>
+          <button data-imp="chesscom">Chess.com</button>
+          <button data-imp="fen">FEN</button>
+        </div>
+
+        <div class="imp on" id="imp-pgn">
+          <textarea id="pgn-text" placeholder="Вставьте PGN партии"></textarea>
+          <div class="row">
+            <button id="pgn-load" class="primary">Загрузить</button>
+            <button id="pgn-file-btn">Файл .pgn</button>
+          </div>
+          <input id="pgn-file" type="file" accept=".pgn,.txt" hidden>
+        </div>
+
+        <div class="imp" id="imp-lichess">
+          <input id="li-input" type="text" placeholder="Ссылка на партию или ник на Lichess" autocapitalize="off" autocomplete="off">
+          <div class="row"><button id="li-go" class="primary">Найти</button></div>
+          <p class="hint">Ссылка загрузит одну партию, ник покажет последние 20.</p>
+        </div>
+
+        <div class="imp" id="imp-chesscom">
+          <input id="cc-input" type="text" placeholder="Ник на Chess.com" autocapitalize="off" autocomplete="off">
+          <div class="row"><button id="cc-go" class="primary">Найти</button></div>
+          <p class="hint">Показываем последние партии игрока. Для одной партии по ссылке вставьте её PGN.</p>
+        </div>
+
+        <div class="imp" id="imp-fen">
+          <input id="fen-input" type="text" placeholder="FEN позиции" autocapitalize="off" autocomplete="off">
+          <div class="row"><button id="fen-go" class="primary">Установить позицию</button></div>
+        </div>
+
+        <div id="gamelist"></div>
+      </section>
+
+      <!-- Здесь позже можно разместить рекламный блок (не поверх доски). -->
+      <div id="ad-slot"></div>
     </div>
 
-    <div class="imp" id="imp-lichess">
-      <input id="li-input" type="text" placeholder="Ссылка на партию или ник на Lichess" autocapitalize="off" autocomplete="off">
-      <div class="row"><button id="li-go" class="primary">Найти</button></div>
-      <p class="hint">Ссылка загрузит одну партию, ник покажет последние 20.</p>
-    </div>
+    <aside id="side">
+      <section class="card">
+        <div id="accrow">
+          <div class="accbox w" id="acc-w">0%</div>
+          <div id="acclabel">Точность</div>
+          <div class="accbox b" id="acc-b">0%</div>
+        </div>
+        <div id="cats" style="margin-top:12px"></div>
+        <div id="progress"><div id="progressbar"></div></div>
+        <div class="actions" style="margin-top:12px">
+          <button id="btn-review" class="primary wide">Анализ партии</button>
+          <button id="btn-comments" class="btn-outline">К комментариям →</button>
+          <button id="btn-sound" class="btn-outline">Звук: вкл</button>
+        </div>
+      </section>
 
-    <div class="imp" id="imp-chesscom">
-      <input id="cc-input" type="text" placeholder="Ник на Chess.com" autocapitalize="off" autocomplete="off">
-      <div class="row"><button id="cc-go" class="primary">Найти</button></div>
-      <p class="hint">Показываем последние партии игрока. Для одной партии по ссылке вставьте её PGN.</p>
-    </div>
-
-    <div class="imp" id="imp-fen">
-      <input id="fen-input" type="text" placeholder="FEN позиции" autocapitalize="off" autocomplete="off">
-      <div class="row"><button id="fen-go" class="primary">Установить позицию</button></div>
-    </div>
-
-    <div id="gamelist"></div>
-  </section>
-
-  <!-- Здесь позже можно разместить рекламный блок (не поверх доски). -->
-  <div id="ad-slot"></div>
+      <section class="card" id="moves-card">
+        <div class="tabs">
+          <button id="tab-moves" class="on">Ходы</button>
+          <button id="tab-comments">Комментарии</button>
+        </div>
+        <div id="movelist"></div>
+        <div id="commentlist" style="display:none"></div>
+      </section>
+    </aside>
+  </div>
 </div>
 
+<div id="ghost"></div>
 <div id="promo"><div class="box" id="promo-box"></div></div>
 <div id="toast"></div>
 
