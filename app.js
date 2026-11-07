@@ -79,36 +79,38 @@ function beep(freq) {
 }
 // Мягкий и глубокий деревянный стук (чистое перкуссионное моделирование без электронных синтезаторных тонов)
 // Яркий деревянный стук с акцентом на щелчок доски и срезом лишних высоких частот
+// Плотный, грубый и собранный деревянный стук без «песочного» шуршания
 let noiseBuf = null;
 function woodClack(capture) {
   if (!settings.sound) return;
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     const t = actx.currentTime;
-    const dur = capture ? 0.06 : 0.04;
+    const dur = capture ? 0.08 : 0.06;
     if (!noiseBuf) {
       noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.08), actx.sampleRate);
       const d = noiseBuf.getChannelData(0);
       for (let i = 0; i < d.length; i++) {
-        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 4);
+        // Делаем огибающую шума более плотной и резкой на старте
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
       }
     }
     const src = actx.createBufferSource();
     src.buffer = noiseBuf;
     
-    // Поднимаем частоту полосового фильтра для звонкого и яркого деревянного «щелчка»
+    // Опускаем частоту полосового фильтра в область плотного грубого тела дерева
     const bp = actx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.value = capture ? 750 : 900;
-    bp.Q.value = 2.5;
+    bp.frequency.value = capture ? 280 : 350;
+    bp.Q.value = 1.8;
 
-    // Усиливаем срез высоких частот, чтобы убрать резкий «песок» и цифровой шум
+    // Низкочастотный фильтр агрессивнее срезает верха, убирая рассыпчатость
     const lp = actx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 1200;
+    lp.frequency.value = 850;
 
     const g = actx.createGain();
-    g.gain.setValueAtTime(capture ? 0.9 : 0.7, t);
+    g.gain.setValueAtTime(capture ? 1.1 : 0.9, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
 
     src.connect(bp);
