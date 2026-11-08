@@ -2,9 +2,9 @@
 const F = 'fill="#fff" stroke="none"';
 const DOT = (x, y) => `<circle cx="${x}" cy="${y}" r="2.3" ${F}/>`;
 const BAR = (x) => `<rect x="${x - 2}" y="4" width="4" height="11" rx="2" ${F}/>`;
-// «?»: дуга и хвостик. Центр хвостика около x = 11.3 (внутри группы сдвигается).
-const HOOK = '<path d="M9.2 9.2 A3 3 0 1 1 13.2 12.1 C12.3 12.5 11.8 13.3 11.8 14.3 V14.8" fill="none"/>';
-const Q = (tx, extra = '') => `<g transform="translate(${tx} 0)">${HOOK}${DOT(11.3, 18.8)}${extra}</g>`;
+// «?»: симметричная относительно оси x = 12 дуга + прямая ножка + точка. Масштабируется вокруг центра.
+const HOOK = '<path d="M8.6 8.9 A3.4 3.4 0 1 1 12 12.3 V14.2" fill="none"/>';
+const Q = (cx, sc = 1) => `<g transform="translate(${cx} 12) scale(${sc}) translate(-12 -12)">${HOOK}${DOT(12, 19)}</g>`;
 
 const ICONS = {
   // «!!» — два столбика
@@ -22,11 +22,11 @@ const ICONS = {
   book: `<path d="M2.8 6.8 C5.6 5.2 8.8 5.3 11.3 7 V19.2 C8.8 17.6 5.6 17.6 2.8 19 Z" ${F}/>` +
     `<path d="M21.2 6.8 C18.4 5.2 15.2 5.3 12.7 7 V19.2 C15.2 17.6 18.4 17.6 21.2 19 Z" ${F}/>`,
   // «?!»
-  inaccuracy: `<g transform="translate(-1.8 0)">${HOOK}${DOT(11.3, 18.8)}</g>` + BAR(17.6) + DOT(17.6, 18.8),
+  inaccuracy: Q(7.2, 0.82) + BAR(17.4) + DOT(17.4, 18.8),
   // «?»
-  mistake: Q(0.7),
+  mistake: Q(12),
   // «??»
-  blunder: Q(-3.6) + Q(5.0),
+  blunder: Q(6.4, 0.82) + Q(17.6, 0.82),
 };
 
 export function catIconSvg(key) {
