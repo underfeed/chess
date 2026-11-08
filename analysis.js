@@ -74,8 +74,12 @@ export function classifyMove({ winBefore, winAfter, isBest, isBook, gap, sacrifi
   if (delta >= THRESHOLDS.blunder) return 'blunder';
   if (delta >= THRESHOLDS.mistake) return 'mistake';
   if (delta >= THRESHOLDS.inaccuracy) return 'inaccuracy';
-  if (sacrifice && delta < 2 && winAfter >= 40 && winBefore <= 85) return 'brilliant';
-  if (gap != null && gap >= 12 && delta < 1 && winBefore > 8 && winBefore < 92) return 'great';
+  if (sacrifice && delta < 3 && winAfter >= 35 && winBefore <= 90) return 'brilliant';
+  // Замечательный: единственный сильный ход (второй заметно хуже) или спасающий/переломный ход.
+  if (gap != null && delta < 2 && winBefore > 5 && winBefore < 95) {
+    if (gap >= 8) return 'great';
+    if (winBefore < 40 && gap >= 5) return 'great';
+  }
   if (isBest || delta < 0.3) return 'best';
   if (delta < 2) return 'excellent';
   return 'good';
