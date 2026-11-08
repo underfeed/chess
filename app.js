@@ -84,69 +84,79 @@ function beep(freq) {
 // Складывается из трёх частей: короткий щелчок контакта, затухающие тона дерева
 // и глухой отзвук самой доски. Тон слегка меняется от хода к ходу, как у живой фигуры.
 let noiseBuf = null;
-const WOOD_MODES = [ // [частота Гц, громкость, затухание с]
-  [210, 0.6, 0.05],
-  [520, 0.38, 0.035],
-  [880, 0.24, 0.026],
-  [1480, 0.12, 0.018],
+let driveCurve = null;
+const WOOD_MODES = [ // [частота Гц, добротность, громкость, затухание с] — шум через узкие резонансы
+  [170, 6, 1.0, 0.07],
+  [390, 7, 0.8, 0.045],
+  [760, 8, 0.55, 0.03],
+  [1350, 9, 0.35, 0.02],
 ];
 
 function knock(t, strength, pitch) {
+  const sr = actx.sampleRate;
+  if (!noiseBuf) {
+    noiseBuf = actx.createBuffer(1, Math.floor(sr * 0.25), sr);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  if (!driveCurve) {
+    driveCurve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) { const x = (i / 128) - 1; driveCurve[i] = Math.tanh(x * 3.5); }
+  }
   const master = actx.createGain();
-  master.gain.value = strength;
+  master.gain.value = strength * 0.9;
+  const shaper = actx.createWaveShaper(); // лёгкая жёсткость, чтобы звук не был «чистым»
+  shaper.curve = driveCurve;
   const lp = actx.createBiquadFilter();
   lp.type = 'lowpass';
-  lp.frequency.value = 5000;
-  master.connect(lp);
+  lp.frequency.value = 3800;
+  master.connect(shaper);
+  shaper.connect(lp);
   lp.connect(actx.destination);
 
-  // 1) контакт: очень короткий щелчок
-  if (!noiseBuf) {
-    const sr = actx.sampleRate;
-    noiseBuf = actx.createBuffer(1, Math.floor(sr * 0.03), sr);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.004));
-  }
-  const src = actx.createBufferSource();
-  src.buffer = noiseBuf;
-  const hp = actx.createBiquadFilter();
-  hp.type = 'highpass';
-  hp.frequency.value = 1200;
-  const cg = actx.createGain();
-  cg.gain.value = 0.55;
-  src.connect(hp);
-  hp.connect(cg);
-  cg.connect(master);
-  src.start(t);
+  // 1) грубый удар: короткий шумовой всплеск
+  const hit = actx.createBufferSource();
+  hit.buffer = noiseBuf;
+  const hg = actx.createGain();
+  hg.gain.setValueAtTime(0.9, t);
+  hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.012);
+  const hhp = actx.createBiquadFilter();
+  hhp.type = 'highpass';
+  hhp.frequency.value = 600;
+  hit.connect(hhp);
+  hhp.connect(hg);
+  hg.connect(master);
+  hit.start(t, Math.random() * 0.15, 0.02);
 
-  // 2) резонансы дерева: несколько быстро затухающих тонов
-  for (const [f, a, tau] of WOOD_MODES) {
-    const o = actx.createOscillator();
+  // 2) деревянный корпус: шум, прогнанный через резонансы с неточными частотами
+  for (const [f, q, a, tau] of WOOD_MODES) {
+    const n = actx.createBufferSource();
+    n.buffer = noiseBuf;
+    const bp = actx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = f * pitch * (1 + (Math.random() - 0.5) * 0.12);
+    bp.Q.value = q;
     const g = actx.createGain();
-    o.type = 'sine';
-    o.frequency.value = f * pitch * (1 + (Math.random() - 0.5) * 0.05);
-    const amp = a * (0.9 + Math.random() * 0.2);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(amp, t + 0.0015);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + tau * 5);
-    o.connect(g);
+    g.gain.setValueAtTime(a * 2.2, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + tau * 3.5);
+    n.connect(bp);
+    bp.connect(g);
     g.connect(master);
-    o.start(t);
-    o.stop(t + tau * 5 + 0.02);
+    n.start(t, Math.random() * 0.15, tau * 3.5 + 0.02);
   }
 
-  // 3) глухой отзвук доски
+  // 3) глухой «стук» доски: низкий тон с резким спадом
   const o2 = actx.createOscillator();
   const g2 = actx.createGain();
-  o2.type = 'sine';
-  o2.frequency.setValueAtTime(120 * pitch, t);
-  o2.frequency.exponentialRampToValueAtTime(70 * pitch, t + 0.08);
-  g2.gain.setValueAtTime(0.4, t);
-  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+  o2.type = 'triangle';
+  o2.frequency.setValueAtTime(110 * pitch, t);
+  o2.frequency.exponentialRampToValueAtTime(55 * pitch, t + 0.07);
+  g2.gain.setValueAtTime(0.5, t);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
   o2.connect(g2);
   g2.connect(master);
   o2.start(t);
-  o2.stop(t + 0.12);
+  o2.stop(t + 0.1);
 }
 
 function woodClack(capture) {
