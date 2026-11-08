@@ -258,6 +258,33 @@ function detectSacrifice(fen, uci) {
   } catch (e) { return false; }
 }
 
+// Жертва по линии движка: после хода и ~4 полуходов лучшей игры материал ходящего
+// остаётся ниже, чем был до хода, не меньше чем на 2 пункта (пешка не считается жертвой).
+function materialOf(c, color) {
+  let m = 0;
+  for (const row of c.board()) for (const p of row) if (p && p.color === color) m += PIECE_VAL[p.type];
+  return m;
+}
+
+function detectSacrificePv(fen, uci, pv) {
+  try {
+    if (!pv || !pv.length) return false;
+    const c = new Chess(fen);
+    const mover = c.turn();
+    const enemy = mover === 'w' ? 'b' : 'w';
+    const before = materialOf(c, mover) - materialOf(c, enemy);
+    if (!c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] })) return false;
+    let worst = 0;
+    let k = 0;
+    for (const u of pv.slice(0, 4)) {
+      if (!c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] })) break;
+      k += 1;
+      if (k % 2 === 0) worst = Math.min(worst, materialOf(c, mover) - materialOf(c, enemy) - before);
+    }
+    return worst <= -2;
+  } catch (e) { return false; }
+}
+
 /* ---------- Доска ---------- */
 function sqCenter(sq) {
   const file = FILES.indexOf(sq[0]);
@@ -588,7 +615,7 @@ function moveInfo(j) {
   const f = gameFlags();
   const r = buildReview({
     scores: [s0, s1], second, bests, playedUcis: [G.ucis[j]], startTurn: turn,
-    sacrifice: [f.sac[j]], book: [f.book[j]],
+    sacrifice: [f.sac[j] || detectSacrificePv(f0, G.ucis[j], (EVAL.get(G.fens[j + 1]) || { lines: [] }).lines[0] && EVAL.get(G.fens[j + 1]).lines[0].pv)], book: [f.book[j]],
   });
   return r.moves[0];
 }
