@@ -341,13 +341,12 @@ function renderArrow() {
   const py = ux;
   // Форма стрелки: острие в точке x2,y2, хвост уходит назад к x1,y1.
   // Контур задан в локальных координатах (back — вдоль стрелки назад, lat — поперёк), симметричен.
-  const k = (Math.min(len, 1.5) * 0.6) / 320;
   const contour = [
-    [0, 0], [80, 155], [85, 61], [320, 0], [85, -61], [80, -155],
+    [0, 0], [0.15, 0.29], [0.16, 0.115], [len, 0], [0.16, -0.115], [0.15, -0.29],
   ];
   const pts = contour.map(([back, lat]) => [
-    x2 - ux * back * k + px * lat * k,
-    y2 - uy * back * k + py * lat * k,
+    x2 - ux * back + px * lat,
+    y2 - uy * back + py * lat,
   ].join(',')).join(' ');
   svg.innerHTML = `<polygon points="${pts}" fill="rgba(124,179,66,0.5)"></polygon>`;
 }
