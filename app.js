@@ -86,9 +86,9 @@ function beep(freq) {
 let noiseBuf = null;
 // Короткий сухой деревянный стук: острый контакт + быстро гаснущие тоны, без хвоста.
 const WOOD_MODES = [ // [частота Гц, громкость, затухание с]
-  [280, 0.8, 0.014],
-  [540, 0.6, 0.01],
-  [930, 0.35, 0.007],
+  [190, 0.9, 0.014],
+  [380, 0.5, 0.01],
+  [640, 0.18, 0.006],
 ];
 
 function knock(t, strength, pitch) {
@@ -99,10 +99,10 @@ function knock(t, strength, pitch) {
     for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.004));
   }
   const master = actx.createGain();
-  master.gain.value = strength * 0.9;
+  master.gain.value = strength * 0.5;
   const lp = actx.createBiquadFilter();
   lp.type = 'lowpass';
-  lp.frequency.value = 2200;
+  lp.frequency.value = 1100;
   lp.Q.value = 0.4;
   const sh = actx.createWaveShaper(); // лёгкая жёсткость
   const cv = new Float32Array(256);
@@ -117,10 +117,10 @@ function knock(t, strength, pitch) {
   src.buffer = noiseBuf;
   const bp = actx.createBiquadFilter();
   bp.type = 'bandpass';
-  bp.frequency.value = 700;
+  bp.frequency.value = 450;
   bp.Q.value = 0.5;
   const cg = actx.createGain();
-  cg.gain.value = 0.9;
+  cg.gain.value = 0.45;
   src.connect(bp);
   bp.connect(cg);
   cg.connect(master);
@@ -145,9 +145,9 @@ function knock(t, strength, pitch) {
   const o2 = actx.createOscillator();
   const g2 = actx.createGain();
   o2.type = 'sine';
-  o2.frequency.setValueAtTime(160 * pitch, t);
-  o2.frequency.exponentialRampToValueAtTime(100 * pitch, t + 0.035);
-  g2.gain.setValueAtTime(0.8, t);
+  o2.frequency.setValueAtTime(120 * pitch, t);
+  o2.frequency.exponentialRampToValueAtTime(75 * pitch, t + 0.04);
+  g2.gain.setValueAtTime(1.0, t);
   g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
   o2.connect(g2);
   g2.connect(master);
