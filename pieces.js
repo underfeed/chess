@@ -6,18 +6,22 @@ let uid = 0;
 
 const PAL = {
   w: {
-    stops: ['#ffffff', '#f3f3ef', '#d2d1ca'],
-    edge: '#7d7c76',
-    detail: '#8a8982',
-    shade: '#1d1b12',
-    shadeOpacity: 0.2,
+    stops: ['#ffffff', '#ebe8de', '#b9b5a8'],
+    edge: '#5a5852',
+    detail: '#5f5d56',
+    shade: '#2a2517',
+    shadeOpacity: 0.3,
+    vein: '#8f8a7d',
+    veinOpacity: 0.38,
   },
   b: {
-    stops: ['#6c6966', '#4a4745', '#292726'],
-    edge: '#141312',
-    detail: '#cfccc5',
+    stops: ['#4a4745', '#222020', '#080807'],
+    edge: '#050505',
+    detail: '#d8d4cb',
     shade: '#000000',
-    shadeOpacity: 0.28,
+    shadeOpacity: 0.5,
+    vein: '#9a958c',
+    veinOpacity: 0.14,
   },
 };
 
@@ -136,11 +140,14 @@ export function pieceSvg(type, color) {
     + `<linearGradient id="${id}f" gradientUnits="userSpaceOnUse" x1="9" y1="0" x2="36" y2="0">${stops}</linearGradient>`
     + `<linearGradient id="${id}s" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="40">`
     + `<stop offset="0" stop-color="${p.shade}" stop-opacity="0"/><stop offset="1" stop-color="${p.shade}" stop-opacity="${p.shadeOpacity}"/></linearGradient>`
-    + `<clipPath id="${id}c">${s.shapes}</clipPath></defs>`
+    + `<clipPath id="${id}c">${s.shapes}</clipPath>`
+    + `<radialGradient id="${id}v1" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="${p.vein}" stop-opacity="${p.veinOpacity}"/><stop offset="1" stop-color="${p.vein}" stop-opacity="0"/></radialGradient>`
+    + `<radialGradient id="${id}v2" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="${p.vein}" stop-opacity="${p.veinOpacity}"/><stop offset="1" stop-color="${p.vein}" stop-opacity="0"/></radialGradient></defs>`
     // контур одним слоем под заливкой: внутри фигуры линий не остаётся
     + `<g fill="${p.edge}" stroke="${p.edge}" stroke-width="1.5" stroke-linejoin="round">${s.shapes}</g>`
     + `<g fill="url(#${id}f)">${s.shapes}</g>`
-    + `<rect x="0" y="0" width="45" height="45" fill="url(#${id}s)" clip-path="url(#${id}c)"/>`
+    + `<g clip-path="url(#${id}c)"><rect x="0" y="0" width="45" height="45" fill="url(#${id}s)"/>`
+    + `<ellipse cx="15" cy="23" rx="9" ry="5" fill="url(#${id}v1)"/><ellipse cx="31" cy="30" rx="8" ry="6" fill="url(#${id}v2)"/></g>`
     + (s.details ? `<g fill="${p.detail}" stroke="${p.detail}" stroke-width="1.1" stroke-linecap="round">${s.details}</g>` : '')
     + `</svg>`;
 }
