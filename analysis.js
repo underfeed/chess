@@ -68,17 +68,18 @@ export function fmtCp(v) {
 // Категория хода.
 // winBefore/winAfter — шанс на победу ходящей стороны до и после хода.
 // gap — насколько второй по силе ход хуже лучшего (в п.п.), либо null.
-export function classifyMove({ winBefore, winAfter, isBest, isBook, gap, sacrifice }) {
+export function classifyMove({ winBefore, winAfter, isBest, isBook, gap, sacrifice, forcedMate }) {
   if (isBook) return 'book';
   const delta = Math.max(0, winBefore - winAfter);
   if (delta >= THRESHOLDS.blunder) return 'blunder';
   if (delta >= THRESHOLDS.mistake) return 'mistake';
   if (delta >= THRESHOLDS.inaccuracy) return 'inaccuracy';
   if (sacrifice && delta < 3 && winAfter >= 35 && winBefore <= 90) return 'brilliant';
+  // Жертва, ведущая к форсированному мату (лучший ход движка), — блестящий ход даже в выигранной позиции.
+  if (sacrifice && forcedMate && isBest) return 'brilliant';
   // Замечательный: единственный сильный ход (второй заметно хуже) или спасающий/переломный ход.
   if (gap != null && delta < 2 && winBefore > 5 && winBefore < 95) {
-    if (gap >= 8) return 'great';
-    if (winBefore < 40 && gap >= 5) return 'great';
+    if (gap >= 5) return 'great';
   }
   if (isBest || delta < 0.3) return 'best';
   if (delta < 2) return 'excellent';
@@ -98,7 +99,7 @@ function emptyCounts() {
 //  playedUcis — сыгранные ходы (uci);
 //  startTurn  — 'w' или 'b' в начальной позиции;
 //  sacrifice[i], book[i] — булевы флаги для хода i.
-export function buildReview({ scores, second, bests, playedUcis, startTurn, sacrifice, book }) {
+export function buildReview({ scores, second, bests, playedUcis, startTurn, sacrifice, book, mates }) {
   const n = playedUcis.length;
   const moves = [];
   const acc = { w: [], b: [] };
@@ -117,6 +118,7 @@ export function buildReview({ scores, second, bests, playedUcis, startTurn, sacr
       isBook: !!(book && book[i]),
       gap,
       sacrifice: !!(sacrifice && sacrifice[i]),
+      forcedMate: !!(mates && mates[i]),
     });
     const a = moveAccuracy(winBefore, winAfter);
     acc[color].push(a);
