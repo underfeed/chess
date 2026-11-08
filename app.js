@@ -84,80 +84,70 @@ function beep(freq) {
 // Складывается из трёх частей: короткий щелчок контакта, затухающие тона дерева
 // и глухой отзвук самой доски. Тон слегка меняется от хода к ходу, как у живой фигуры.
 let noiseBuf = null;
-let driveCurve = null;
-const WOOD_MODES = [ // [частота Гц, добротность, громкость, затухание с] — шум через узкие резонансы
-  [140, 4, 1.0, 0.08],
-  [320, 5, 0.8, 0.05],
-  [620, 6, 0.4, 0.03],
-  [950, 6, 0.15, 0.02],
+// Короткий сухой деревянный стук: острый контакт + быстро гаснущие тоны, без хвоста.
+const WOOD_MODES = [ // [частота Гц, громкость, затухание с]
+  [330, 0.7, 0.012],
+  [620, 0.55, 0.009],
+  [1050, 0.3, 0.006],
 ];
 
 function knock(t, strength, pitch) {
   const sr = actx.sampleRate;
   if (!noiseBuf) {
-    noiseBuf = actx.createBuffer(1, Math.floor(sr * 0.25), sr);
+    noiseBuf = actx.createBuffer(1, Math.floor(sr * 0.02), sr);
     const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  }
-  if (!driveCurve) {
-    driveCurve = new Float32Array(256);
-    for (let i = 0; i < 256; i++) { const x = (i / 128) - 1; driveCurve[i] = Math.tanh(x * 5); }
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.0015));
   }
   const master = actx.createGain();
-  master.gain.value = strength * 0.75;
-  const shaper = actx.createWaveShaper(); // лёгкая жёсткость, чтобы звук не был «чистым»
-  shaper.curve = driveCurve;
+  master.gain.value = strength;
   const lp = actx.createBiquadFilter();
   lp.type = 'lowpass';
-  lp.frequency.value = 1500;
-  lp.Q.value = 0.5;
-  master.connect(shaper);
-  shaper.connect(lp);
+  lp.frequency.value = 2200;
+  lp.Q.value = 0.4;
+  master.connect(lp);
   lp.connect(actx.destination);
 
-  // 1) грубый удар: короткий шумовой всплеск
-  const hit = actx.createBufferSource();
-  hit.buffer = noiseBuf;
-  const hg = actx.createGain();
-  hg.gain.setValueAtTime(0.6, t);
-  hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.02);
-  const hhp = actx.createBiquadFilter();
-  hhp.type = 'highpass';
-  hhp.frequency.value = 250;
-  hit.connect(hhp);
-  hhp.connect(hg);
-  hg.connect(master);
-  hit.start(t, Math.random() * 0.15, 0.02);
+  // 1) контакт: очень короткий приглушённый щелчок
+  const src = actx.createBufferSource();
+  src.buffer = noiseBuf;
+  const bp = actx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 900;
+  bp.Q.value = 0.7;
+  const cg = actx.createGain();
+  cg.gain.value = 0.5;
+  src.connect(bp);
+  bp.connect(cg);
+  cg.connect(master);
+  src.start(t);
 
-  // 2) деревянный корпус: шум, прогнанный через резонансы с неточными частотами
-  for (const [f, q, a, tau] of WOOD_MODES) {
-    const n = actx.createBufferSource();
-    n.buffer = noiseBuf;
-    const bp = actx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = f * pitch * (1 + (Math.random() - 0.5) * 0.12);
-    bp.Q.value = q;
+  // 2) дерево: гладкие тоны с очень быстрым затуханием
+  for (const [f, a, tau] of WOOD_MODES) {
+    const o = actx.createOscillator();
     const g = actx.createGain();
-    g.gain.setValueAtTime(a * 2.2, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + tau * 3.5);
-    n.connect(bp);
-    bp.connect(g);
+    o.type = 'sine';
+    o.frequency.value = f * pitch;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(a, t + 0.0008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + tau * 5);
+    o.connect(g);
     g.connect(master);
-    n.start(t, Math.random() * 0.15, tau * 3.5 + 0.02);
+    o.start(t);
+    o.stop(t + tau * 5 + 0.01);
   }
 
-  // 3) глухой «стук» доски: низкий тон с резким спадом
+  // 3) корпус доски: короткий низкий тон
   const o2 = actx.createOscillator();
   const g2 = actx.createGain();
-  o2.type = 'triangle';
-  o2.frequency.setValueAtTime(95 * pitch, t);
-  o2.frequency.exponentialRampToValueAtTime(48 * pitch, t + 0.08);
-  g2.gain.setValueAtTime(0.9, t);
-  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+  o2.type = 'sine';
+  o2.frequency.setValueAtTime(190 * pitch, t);
+  o2.frequency.exponentialRampToValueAtTime(130 * pitch, t + 0.03);
+  g2.gain.setValueAtTime(0.8, t);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
   o2.connect(g2);
   g2.connect(master);
   o2.start(t);
-  o2.stop(t + 0.12);
+  o2.stop(t + 0.06);
 }
 
 function woodClack(capture) {
@@ -165,9 +155,7 @@ function woodClack(capture) {
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     if (actx.state === 'suspended') actx.resume();
-    const t = actx.currentTime + 0.005;
-    knock(t, capture ? 1 : 0.8, capture ? 0.88 : 1);
-    if (capture) knock(t + 0.075, 0.55, 0.78); // вторая фигура убирается с доски
+    knock(actx.currentTime + 0.005, capture ? 1 : 0.8, capture ? 0.9 : 1);
   } catch (e) { /* звук недоступен */ }
 }
 const playMoveSound = (capture) => woodClack(capture);
