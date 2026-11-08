@@ -163,7 +163,56 @@ function woodClack(capture) {
     knock(actx.currentTime + 0.005, capture ? 1 : 0.8, capture ? 0.9 : 1);
   } catch (e) { /* звук недоступен */ }
 }
-const playMoveSound = (capture) => woodClack(capture);
+
+// Звук хода: готовые WAV (44,1 кГц, моно) из папки sounds/. Каждый раз случайный вариант
+// со слегка изменённой высотой и громкостью. Если файлы не загрузились, играет синтез выше.
+const SOUND_FILES = { move: ['move1', 'move2', 'move3', 'move4'], capture: ['capture1', 'capture2'], check: ['check1', 'check2'] };
+const soundBufs = {};
+let soundLoading = false;
+async function loadSounds() {
+  if (soundLoading) return;
+  soundLoading = true;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    for (const [kind, names] of Object.entries(SOUND_FILES)) {
+      soundBufs[kind] = [];
+      for (const nm of names) {
+        const r = await fetch(`sounds/${nm}.wav`);
+        if (!r.ok) throw new Error(nm);
+        soundBufs[kind].push(await actx.decodeAudioData(await r.arrayBuffer()));
+      }
+    }
+  } catch (e) { soundBufs.failed = true; }
+}
+
+function playSample(kind) {
+  const list = soundBufs[kind];
+  if (!list || !list.length) return false;
+  const src = actx.createBufferSource();
+  src.buffer = list[Math.floor(Math.random() * list.length)];
+  src.playbackRate.value = 1 + (Math.random() - 0.5) * 0.12;   // ±6% высоты
+  const g = actx.createGain();
+  g.gain.value = 0.85 + Math.random() * 0.15;                  // небольшая разница громкости
+  src.connect(g);
+  g.connect(actx.destination);
+  src.start();
+  return true;
+}
+
+// san — запись хода (например «Qxf7+»); captured — тип взятой фигуры, если известен.
+function playMoveSound(san, captured) {
+  if (!settings.sound) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    if (!soundBufs.move && !soundBufs.failed) loadSounds();
+    const isCapture = /x/.test(san || '');
+    const isCheck = /[+#]/.test(san || '');
+    const queenTakes = isCapture && (captured === 'q' || /^Q/.test(san || ''));
+    const kind = isCheck || queenTakes ? 'check' : isCapture ? 'capture' : 'move';
+    if (!playSample(kind)) woodClack(isCapture);
+  } catch (e) { /* звук недоступен */ }
+}
 
 // Ставит «призрак» фигуры точно под курсор, без задержки.
 function placeGhost(x, y, half) {
@@ -284,6 +333,8 @@ function detectSacrificePv(fen, uci, pv) {
     return worst <= -2;
   } catch (e) { return false; }
 }
+
+loadSounds();
 
 /* ---------- Доска ---------- */
 function sqCenter(sq) {
@@ -448,7 +499,7 @@ function makeMove(from, to, promotion) {
     G.ucis.push(uci);
     G.fens.push(c.fen());
   }
-  playMoveSound(!!m.captured);
+  playMoveSound(m.san, m.captured);
   haptic();
   G.ply += 1;
   selected = null;
@@ -464,7 +515,7 @@ function goTo(ply) {
   G.ply = target;
   selected = null;
   targets = [];
-  if (Math.abs(target - prev) === 1) playMoveSound(G.sans[Math.max(target, prev) - 1].includes('x'));
+  if (Math.abs(target - prev) === 1) playMoveSound(G.sans[Math.max(target, prev) - 1]);
   renderAll();
   requestLive();
 }
