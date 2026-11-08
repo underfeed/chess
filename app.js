@@ -615,6 +615,7 @@ function moveInfo(j) {
   const f = gameFlags();
   const r = buildReview({
     scores: [s0, s1], second, bests, playedUcis: [G.ucis[j]], startTurn: turn,
+    mates: [!!(c0 && !isTerm && c0.lines[0].mate != null && c0.lines[0].mate > 0)],
     sacrifice: [f.sac[j] || detectSacrificePv(f0, G.ucis[j], (EVAL.get(G.fens[j + 1]) || { lines: [] }).lines[0] && EVAL.get(G.fens[j + 1]).lines[0].pv)], book: [f.book[j]],
   });
   return r.moves[0];
