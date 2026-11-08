@@ -339,15 +339,16 @@ function renderArrow() {
   const uy = dy / len;
   const px = -uy;
   const py = ux;
-  const head = 0.34;
-  const w = 0.08;
-  const ex = x2 - ux * head * 0.9;
-  const ey = y2 - uy * head * 0.9;
-  const pts = [
-    [x1 + px * w, y1 + py * w], [ex + px * w, ey + py * w], [ex + px * head * 0.55, ey + py * head * 0.55],
-    [x2, y2],
-    [ex - px * head * 0.55, ey - py * head * 0.55], [ex - px * w, ey - py * w], [x1 - px * w, y1 - py * w],
-  ].map((p) => p.join(',')).join(' ');
+  // Форма стрелки: острие в точке x2,y2, хвост уходит назад к x1,y1.
+  // Контур задан в локальных координатах (back — вдоль стрелки назад, lat — поперёк), симметричен.
+  const k = (len * 0.95) / 320;
+  const contour = [
+    [0, 0], [61, 235], [155, 240], [0, 320], [-155, 240], [-61, 235],
+  ];
+  const pts = contour.map(([back, lat]) => [
+    x2 - ux * back * k + px * lat * k,
+    y2 - uy * back * k + py * lat * k,
+  ].join(',')).join(' ');
   svg.innerHTML = `<polygon points="${pts}" fill="rgba(124,179,66,0.85)"></polygon>`;
 }
 
