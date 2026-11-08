@@ -74,12 +74,12 @@ export function classifyMove({ winBefore, winAfter, isBest, isBook, gap, sacrifi
   if (delta >= THRESHOLDS.blunder) return 'blunder';
   if (delta >= THRESHOLDS.mistake) return 'mistake';
   if (delta >= THRESHOLDS.inaccuracy) return 'inaccuracy';
-  if (sacrifice && delta < 3 && winAfter >= 35 && winBefore <= 90) return 'brilliant';
+  if (sacrifice && delta < 2 && winAfter >= 40 && winBefore <= 85) return 'brilliant';
   // Жертва, ведущая к форсированному мату (лучший ход движка), — блестящий ход даже в выигранной позиции.
   if (sacrifice && forcedMate && isBest) return 'brilliant';
   // Замечательный: единственный сильный ход (второй заметно хуже) или спасающий/переломный ход.
   if (gap != null && delta < 2 && winBefore > 5 && winBefore < 95) {
-    if (gap >= 5) return 'great';
+    if (gap >= 6) return 'great';
   }
   if (isBest || delta < 0.3) return 'best';
   if (delta < 2) return 'excellent';
