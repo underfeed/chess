@@ -77,55 +77,90 @@ function beep(freq) {
     o.stop(actx.currentTime + 0.09);
   } catch (e) { /* звук недоступен */ }
 }
-// Мягкий и глубокий деревянный стук (чистое перкуссионное моделирование без электронных синтезаторных тонов)
-// Максимально плотный, ударный и монолитный деревянный стук (без шуршания и рассыпчатости)
+// Звук хода: как будто фигуру ставят на деревянную доску.
+// Складывается из трёх частей: короткий щелчок контакта, затухающие тона дерева
+// и глухой отзвук самой доски. Тон слегка меняется от хода к ходу, как у живой фигуры.
 let noiseBuf = null;
+const WOOD_MODES = [ // [частота Гц, громкость, затухание с]
+  [210, 0.6, 0.05],
+  [520, 0.38, 0.035],
+  [880, 0.24, 0.026],
+  [1480, 0.12, 0.018],
+];
+
+function knock(t, strength, pitch) {
+  const master = actx.createGain();
+  master.gain.value = strength;
+  const lp = actx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 5000;
+  master.connect(lp);
+  lp.connect(actx.destination);
+
+  // 1) контакт: очень короткий щелчок
+  if (!noiseBuf) {
+    const sr = actx.sampleRate;
+    noiseBuf = actx.createBuffer(1, Math.floor(sr * 0.03), sr);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.004));
+  }
+  const src = actx.createBufferSource();
+  src.buffer = noiseBuf;
+  const hp = actx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 1200;
+  const cg = actx.createGain();
+  cg.gain.value = 0.55;
+  src.connect(hp);
+  hp.connect(cg);
+  cg.connect(master);
+  src.start(t);
+
+  // 2) резонансы дерева: несколько быстро затухающих тонов
+  for (const [f, a, tau] of WOOD_MODES) {
+    const o = actx.createOscillator();
+    const g = actx.createGain();
+    o.type = 'sine';
+    o.frequency.value = f * pitch * (1 + (Math.random() - 0.5) * 0.05);
+    const amp = a * (0.9 + Math.random() * 0.2);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(amp, t + 0.0015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + tau * 5);
+    o.connect(g);
+    g.connect(master);
+    o.start(t);
+    o.stop(t + tau * 5 + 0.02);
+  }
+
+  // 3) глухой отзвук доски
+  const o2 = actx.createOscillator();
+  const g2 = actx.createGain();
+  o2.type = 'sine';
+  o2.frequency.setValueAtTime(120 * pitch, t);
+  o2.frequency.exponentialRampToValueAtTime(70 * pitch, t + 0.08);
+  g2.gain.setValueAtTime(0.4, t);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+  o2.connect(g2);
+  g2.connect(master);
+  o2.start(t);
+  o2.stop(t + 0.12);
+}
+
 function woodClack(capture) {
   if (!settings.sound) return;
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-    const t = actx.currentTime;
-    const dur = capture ? 0.05 : 0.035; // короткий, плотный импульс
-    if (!noiseBuf) {
-      noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.05), actx.sampleRate);
-      const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) {
-        // Резкая, единая монолитная волна без белого шума и рассыпания
-        const env = 1 - (i / d.length);
-        d[i] = (Math.random() > 0.5 ? 1 : -1) * Math.pow(env, 1.2);
-      }
-    }
-    const src = actx.createBufferSource();
-    src.buffer = noiseBuf;
-    
-    // Низкая частота резонатора для брутального тела
-    const bp = actx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = capture ? 220 : 280;
-    bp.Q.value = 1.2;
-
-    // Жёсткий срез верхов убирает малейшую шероховатость
-    const lp = actx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 550;
-
-    const g = actx.createGain();
-    g.gain.setValueAtTime(capture ? 1.2 : 1.0, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-
-    src.connect(bp);
-    bp.connect(lp);
-    lp.connect(g);
-    g.connect(actx.destination);
-    src.start(t);
+    if (actx.state === 'suspended') actx.resume();
+    const t = actx.currentTime + 0.005;
+    knock(t, capture ? 1 : 0.8, capture ? 0.88 : 1);
+    if (capture) knock(t + 0.075, 0.55, 0.78); // вторая фигура убирается с доски
   } catch (e) { /* звук недоступен */ }
 }
 const playMoveSound = (capture) => woodClack(capture);
 
-// Положить «призрак» фигуры по центру pointer'а (без анимации).
-function placeGhost(x, y) {
-  const ghost = $('ghost');
-  ghost.style.transform = `translate(${x - ghost.offsetWidth / 2}px, ${y - ghost.offsetHeight / 2}px)`;
+// Ставит «призрак» фигуры точно под курсор, без задержки.
+function placeGhost(x, y, half) {
+  $('ghost').style.transform = `translate3d(${x - half}px, ${y - half}px, 0)`;
 }
 
 // Быстро доводит фигуру до клетки назначения и вызывает done.
@@ -139,9 +174,9 @@ function glideGhost(sq, done) {
   const row = G.flipped ? rk : 7 - rk;
   const x = r.left + col * size + (size - ghost.offsetWidth) / 2;
   const y = r.top + row * size + (size - ghost.offsetHeight) / 2;
-  ghost.style.transition = 'transform 0.09s ease-out';
+  ghost.style.transition = 'transform 0.07s ease-out';
   ghost.style.transform = `translate(${x}px, ${y}px)`;
-  setTimeout(done, 90);
+  setTimeout(done, 70);
 }
 function haptic() {
   try { if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light'); } catch (e) { /* нет */ }
@@ -1049,15 +1084,13 @@ function bindUi() {
       ghost.className = 'piece ' + drag.piece.color;
       ghost.innerHTML = pieceSvg(drag.piece.type, drag.piece.color);
       ghost.style.display = 'flex';
-      ghost.style.transition = 'none';
-      placeGhost(e.clientX, e.clientY);
-      void ghost.offsetWidth; // фиксируем стартовую позицию без «полёта» из угла
-      ghost.style.transition = '';
+      drag.half = size / 2;
+      placeGhost(e.clientX, e.clientY, drag.half);
       renderBoard();
       e.preventDefault();
       return;
     }
-    placeGhost(e.clientX, e.clientY);
+    placeGhost(e.clientX, e.clientY, drag.half);
     e.preventDefault();
   });
 
