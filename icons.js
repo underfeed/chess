@@ -1,23 +1,35 @@
-// Значки категорий ходов. Рисуются SVG, поэтому всегда по центру и без засечек шрифта.
-// Все фигуры нарисованы в сетке 24×24, центр = (12, 12).
-
-const DOT = (x, y) => `<circle cx="${x}" cy="${y}" r="2.1" fill="#fff" stroke="none"/>`;
-// «?» с центром около x=12, без засечек: дуга плюс хвостик
-const HOOK = '<path d="M10.2 9.6 A2.8 2.8 0 1 1 13.8 12.3 C13.0 12.6 12.5 13.3 12.5 14.2 V14.8"/>';
+// Значки категорий ходов: белые, жирные, заполняют круг. Сетка 24×24, центр (12, 12).
+const F = 'fill="#fff" stroke="none"';
+const DOT = (x, y) => `<circle cx="${x}" cy="${y}" r="2.3" ${F}/>`;
+const BAR = (x) => `<rect x="${x - 2}" y="4" width="4" height="11" rx="2" ${F}/>`;
+// «?»: дуга и хвостик. Центр хвостика около x = 11.3 (внутри группы сдвигается).
+const HOOK = '<path d="M9.2 9.2 A3 3 0 1 1 13.2 12.1 C12.3 12.5 11.8 13.3 11.8 14.3 V14.8" fill="none"/>';
+const Q = (tx, extra = '') => `<g transform="translate(${tx} 0)">${HOOK}${DOT(11.3, 18.8)}${extra}</g>`;
 
 const ICONS = {
-  brilliant: `<path d="M10 6.5 V14 M14 6.5 V14"/>${DOT(10, 18.5)}${DOT(14, 18.5)}`,
-  great: `<path d="M12 6.5 V14"/>${DOT(12, 18.5)}`,
-  best: '<polygon points="12,3.8 14.5,9.1 20.2,9.7 15.9,13.5 17.1,19.2 12,16.3 6.9,19.2 8.1,13.5 3.8,9.7 9.5,9.1" fill="#fff" stroke="none"/>',
-  excellent: '<path d="M12 7.5 V16.5 M7.5 12 H16.5"/>',
-  good: '<path d="M7.5 12.5 L10.8 15.8 L16.5 9.2"/>',
-  book: '<path d="M7.5 8 H16.5 M7.5 12 H16.5 M7.5 16 H16.5"/>',
-  inaccuracy: `<g transform="translate(-1.5 0)">${HOOK}${DOT(12, 18.5)}</g><path d="M17 8.5 V14.5"/>${DOT(17, 18.5)}`,
-  mistake: HOOK + DOT(12, 18.5),
-  blunder: `<g transform="translate(-4 0)">${HOOK}${DOT(12, 18.5)}</g><g transform="translate(4 0)">${HOOK}${DOT(12, 18.5)}</g>`,
+  // «!!» — два столбика
+  brilliant: BAR(9.2) + BAR(14.8) + DOT(9.2, 18.8) + DOT(14.8, 18.8),
+  // «!»
+  great: BAR(12) + DOT(12, 18.8),
+  // звезда
+  best: `<polygon points="12.00,3.00 14.53,8.92 20.94,9.50 16.09,13.73 17.53,20.00 12.00,16.70 6.47,20.00 7.91,13.73 3.06,9.50 9.47,8.92" ${F}/>`,
+  // большой палец вверх
+  excellent: `<rect x="2.8" y="10.4" width="4.2" height="10" rx="1.4" ${F}/>` +
+    `<path d="M8.4 10.6 L11.8 4.4 C12.5 3.2 14.6 3.8 14.3 5.5 L13.5 9.6 H19.2 C20.7 9.6 21.7 11 21.2 12.5 L19.5 18.4 C19.2 19.5 18.2 20.2 17.1 20.2 H8.4 Z" ${F}/>`,
+  // галочка
+  good: '<path d="M5.6 12.8 L10.1 17.2 L18.6 7.8" fill="none" stroke-width="4"/>',
+  // открытая книга
+  book: `<path d="M2.8 6.8 C5.6 5.2 8.8 5.3 11.3 7 V19.2 C8.8 17.6 5.6 17.6 2.8 19 Z" ${F}/>` +
+    `<path d="M21.2 6.8 C18.4 5.2 15.2 5.3 12.7 7 V19.2 C15.2 17.6 18.4 17.6 21.2 19 Z" ${F}/>`,
+  // «?!»
+  inaccuracy: `<g transform="translate(-1.8 0)">${HOOK}${DOT(11.3, 18.8)}</g>` + BAR(17.6) + DOT(17.6, 18.8),
+  // «?»
+  mistake: Q(0.7),
+  // «??»
+  blunder: Q(-3.6) + Q(5.0),
 };
 
 export function catIconSvg(key) {
   const body = ICONS[key] || '';
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#fff" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 }
