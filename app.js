@@ -1,7 +1,7 @@
 import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1/+esm';
 import {
   CATS, CAT_BY_KEY, winPct, lineToWhiteCp, fmtCp, buildReview, buildBook, openingName,
-  boardToFen, boardProblem,
+  boardToFen, boardProblem, gameAccuracy,
 } from './analysis.js';
 import { Engine } from './engine.js';
 import { pieceSvg } from './pieces.js';
@@ -40,11 +40,14 @@ let selected = null;
 let targets = [];
 let book = null;
 let engineState = 'loading'; // loading | ready | error
-let reviewRunning = false;
 let reviewToken = 0;
 let liveTimer = null;
 let editor = null; // состояние редактора позиции, null когда он закрыт
 let drag = null; // перетаскивание фигуры: {sq, from, piece, moved, x0, y0}
+const EVAL = new Map(); // fen -> {lines, multi}: результат движка по каждой позиции
+let loopBusy = false;  // идёт ли фоновый анализ
+let loopAgain = false; // позиция сменилась, нужно начать заново
+let sacMemo = { key: '', sac: [], book: [] };
 const engine = new Engine();
 
 const cur = () => new Chess(G.fens[G.ply]);
@@ -302,12 +305,17 @@ function renderBoard() {
         n.textContent = FILES[file];
         div.appendChild(n);
       }
-      if (rv && last && sq === last.to) {
-        const cat = CAT_BY_KEY[rv.cat];
+      if (last && sq === last.to) {
         const bdg = document.createElement('span');
         bdg.className = 'sqbadge';
-        bdg.style.background = cat.color;
-        bdg.innerHTML = catIconSvg(cat.key);
+        if (rv) {
+          const cat = CAT_BY_KEY[rv.cat];
+          bdg.style.background = cat.color;
+          bdg.innerHTML = catIconSvg(cat.key);
+        } else {
+          bdg.style.background = '#6b6862';
+          bdg.textContent = '…';
+        }
         div.appendChild(bdg);
       }
       boardEl.appendChild(div);
@@ -408,7 +416,6 @@ function makeMove(from, to, promotion) {
     G.sans.push(m.san);
     G.ucis.push(uci);
     G.fens.push(c.fen());
-    if (review) { review = null; toast('Позиция изменилась. Запустите анализ заново'); }
   }
   playMoveSound(!!m.captured);
   haptic();
@@ -542,30 +549,142 @@ function editorDone() {
 /* ---------- Живой анализ ---------- */
 function isTerminal(fen) { return new Chess(fen).isGameOver(); }
 
-function requestLive() {
-  clearTimeout(liveTimer);
-  live = { lines: [], depth: 0 };
-  if (editor || !settings.live || engineState !== 'ready' || reviewRunning) { renderEval(); renderArrow(); return; }
-  renderEval();
-  renderArrow();
-  liveTimer = setTimeout(() => {
-    const fen = G.fens[G.ply];
-    if (isTerminal(fen)) return;
-    engine.analyze(fen, {
-      depth: settings.depth,
-      multipv: 3,
-      onInfo: (lines, depth) => {
-        if (fen !== G.fens[G.ply]) return;
-        live = { lines, depth };
-        scheduleEvalRender();
-      },
-    }).then((lines) => {
-      if (lines && lines.length && fen === G.fens[G.ply]) { live = { lines, depth: lines[0].depth }; }
-      renderEval();
-      renderArrow();
-    });
-  }, 150);
+const zeroCounts = () => Object.fromEntries(CATS.map((c) => [c.key, 0]));
+
+function positionWhiteCp(i) {
+  const fen = G.fens[i];
+  const t = terminalScore(fen);
+  if (t !== null) return t;
+  const c = EVAL.get(fen);
+  return c ? lineToWhiteCp(c.lines[0], turnOf(fen)) : null;
 }
+
+function gameFlags() {
+  const key = G.startFen + '|' + G.ucis.join(',') + '|' + (book ? 1 : 0);
+  if (sacMemo.key !== key) {
+    const sac = G.ucis.map((u, i) => detectSacrifice(G.fens[i], u));
+    const bk = G.ucis.map((u, i) => !!(book && G.startFen === START_FEN && book.prefixes.has(G.sans.slice(0, i + 1).join(' '))));
+    sacMemo = { key, sac, book: bk };
+  }
+  return sacMemo;
+}
+
+// Категория одного хода j (из позиции j в позицию j+1), если обе позиции уже разобраны.
+function moveInfo(j) {
+  if (j < 0 || j + 1 >= G.fens.length) return null;
+  const f0 = G.fens[j];
+  const s0 = positionWhiteCp(j);
+  const s1 = positionWhiteCp(j + 1);
+  if (s0 == null || s1 == null) return null;
+  const turn = turnOf(f0);
+  const c0 = EVAL.get(f0);
+  const isTerm = terminalScore(f0) !== null;
+  const second = c0 && c0.lines[1] && !isTerm ? [lineToWhiteCp(c0.lines[1], turn)] : [null];
+  const bests = [c0 && !isTerm && c0.lines[0].pv[0] ? c0.lines[0].pv[0] : null];
+  const f = gameFlags();
+  const r = buildReview({
+    scores: [s0, s1], second, bests, playedUcis: [G.ucis[j]], startTurn: turn,
+    sacrifice: [f.sac[j]], book: [f.book[j]],
+  });
+  return r.moves[0];
+}
+
+// Сводка по партии: то, что уже разобрано, остальное null (показывается как «считаю»).
+function buildLiveReview() {
+  const n = G.fens.length;
+  const scores = [];
+  const bests = [];
+  for (let i = 0; i < n; i++) {
+    scores.push(positionWhiteCp(i));
+    const c = EVAL.get(G.fens[i]);
+    bests.push(c && c.lines[0] && c.lines[0].pv[0] ? c.lines[0].pv[0] : null);
+  }
+  const moves = [];
+  const acc = { w: [], b: [] };
+  const counts = { w: zeroCounts(), b: zeroCounts() };
+  for (let j = 0; j < G.ucis.length; j++) {
+    const m = moveInfo(j);
+    moves.push(m);
+    if (m) { acc[m.color].push(m.acc); counts[m.color][m.cat] += 1; }
+  }
+  return { moves, counts, accuracy: { w: gameAccuracy(acc.w), b: gameAccuracy(acc.b) }, scores, bests };
+}
+
+// Перезапуск фонового анализа при любом изменении позиции.
+function requestAnalysis() {
+  const c = EVAL.get(G.fens[G.ply]);
+  live = c ? { lines: c.lines, depth: settings.depth } : { lines: [], depth: 0 };
+  review = buildLiveReview();
+  renderAll();
+  setProgress();
+  if (loopBusy) {
+    loopAgain = true;
+    engine.stop();
+  } else {
+    runAnalysis();
+  }
+}
+
+function runAnalysis() {
+  loopBusy = true;
+  (async () => {
+    try {
+      do {
+        loopAgain = false;
+        await analysisPass();
+      } while (loopAgain);
+    } catch (e) {
+      /* движок недоступен — просто останавливаем фон */
+    } finally {
+      loopBusy = false;
+    }
+  })();
+}
+
+// Разбирает позиции партии: сначала текущую, затем предыдущую, затем с конца.
+async function analysisPass() {
+  if (engineState !== 'ready' || editor) return;
+  const n = G.fens.length;
+  const order = [G.ply, G.ply - 1];
+  for (let i = n - 1; i >= 0; i--) order.push(i);
+  const seen = new Set();
+  for (const i of order) {
+    if (i < 0 || i >= n || seen.has(i)) continue;
+    seen.add(i);
+    if (loopAgain || editor) return;
+    const fen = G.fens[i];
+    if (terminalScore(fen) !== null) continue;
+    const isCur = i === G.ply;
+    const need = isCur ? 3 : 2;
+    const have = EVAL.get(fen);
+    if (have && have.multi >= need) continue;
+    const lines = await engine.analyze(fen, {
+      depth: settings.depth,
+      multipv: need,
+      onInfo: isCur ? (ls, d) => {
+        if (fen === G.fens[G.ply]) { live = { lines: ls, depth: d }; scheduleEvalRender(); }
+      } : null,
+    });
+    if (!lines || !lines.length) return;
+    EVAL.set(fen, { lines, multi: need });
+    if (isCur) live = { lines, depth: lines[0].depth };
+    onAnalysisUpdate();
+  }
+}
+
+function onAnalysisUpdate() {
+  review = buildLiveReview();
+  renderBoard();
+  renderArrow();
+  renderEval();
+  renderMoves();
+  renderGraph();
+  renderPanel();
+  renderComments();
+  setProgress();
+}
+
+function requestLive() { requestAnalysis(); }
 
 let evalRaf = 0;
 function scheduleEvalRender() {
@@ -660,8 +779,10 @@ function renderPanel() {
 }
 
 function jumpToCat(key, side) {
-  if (!review) { toast('Сначала нажмите «Анализ партии»'); return; }
-  const plies = review.moves.filter((m) => m.cat === key && m.color === side).map((m) => m.ply);
+  if (!review) { toast('Анализ ещё не готов'); return; }
+  const plies = review.moves
+    .map((m, i) => (m && m.cat === key && m.color === side ? i + 1 : 0))
+    .filter(Boolean);
   if (!plies.length) return;
   const next = plies.find((p) => p > G.ply) || plies[0];
   goTo(next);
@@ -745,33 +866,38 @@ function commentText(i) {
 function renderComments() {
   const box = $('commentlist');
   box.innerHTML = '';
-  if (!review) {
-    const p = document.createElement('p');
-    p.className = 'muted';
-    p.textContent = 'Нажмите «Анализ партии», и здесь появятся комментарии к каждому ходу.';
-    box.appendChild(p);
-    return;
-  }
   G.sans.forEach((san, i) => {
-    const m = review.moves[i];
-    const cat = CAT_BY_KEY[m.cat];
+    const m = review ? review.moves[i] : null;
     const row = document.createElement('button');
     row.className = 'crow' + (G.ply === i + 1 ? ' cur' : '');
     const badge = document.createElement('span');
     badge.className = 'badge';
-    badge.style.background = cat.color;
-    badge.innerHTML = catIconSvg(cat.key);
     const t = document.createElement('div');
     t.className = 't';
     const head = document.createElement('b');
-    head.textContent = `${plyNumber(i)}${m.color === 'w' ? '.' : '…'} ${san}`;
+    head.textContent = `${plyNumber(i)}${plyColor(i) === 'w' ? '.' : '…'} ${san}`;
     t.appendChild(head);
     t.appendChild(document.createElement('br'));
-    t.appendChild(document.createTextNode(commentText(i)));
+    if (m) {
+      const cat = CAT_BY_KEY[m.cat];
+      badge.style.background = cat.color;
+      badge.innerHTML = catIconSvg(cat.key);
+      t.appendChild(document.createTextNode(commentText(i)));
+    } else {
+      badge.style.background = '#6b6862';
+      badge.textContent = '…';
+      t.appendChild(document.createTextNode('Считаю…'));
+    }
     row.append(badge, t);
     row.onclick = () => goTo(i + 1);
     box.appendChild(row);
   });
+  if (!G.sans.length) {
+    const p = document.createElement('p');
+    p.className = 'muted';
+    p.textContent = 'Ходов пока нет.';
+    box.appendChild(p);
+  }
   keepInView(box, box.querySelector('.crow.cur'));
 }
 
@@ -779,12 +905,16 @@ function renderGraph() {
   const card = $('graph-card');
   const n = G.fens.length;
   if (!review || n < 2) { card.style.display = 'none'; return; }
-  card.style.display = '';
   const W = 300;
   const H = 70;
-  const pts = review.scores.map((v, i) => [(i / (n - 1)) * W, H - (winPct(v) / 100) * H]);
+  const pts = [];
+  review.scores.forEach((v, i) => {
+    if (v != null) pts.push([(i / (n - 1)) * W, H - (winPct(v) / 100) * H]);
+  });
+  if (pts.length < 2) { card.style.display = 'none'; return; }
+  card.style.display = '';
   const line = pts.map((p) => p.join(',')).join(' ');
-  const area = `0,${H} ${line} ${W},${H}`;
+  const area = `${pts[0][0]},${H} ${line} ${pts[pts.length - 1][0]},${H}`;
   const cx = (G.ply / (n - 1)) * W;
   $('graph').innerHTML = `
     <rect x="0" y="0" width="${W}" height="${H}" fill="#3b3936"></rect>
@@ -837,98 +967,27 @@ function renderAll() {
 }
 
 /* ---------- Анализ всей партии ---------- */
-function setProgress(frac) {
-  $('progress').classList.toggle('on', reviewRunning);
-  $('progressbar').style.width = Math.round(frac * 100) + '%';
-  $('btn-review').textContent = reviewRunning ? `Остановить анализ (${Math.round(frac * 100)}%)` : 'Анализ партии';
+function setProgress() {
+  const n = G.fens.length;
+  let done = 0;
+  for (let i = 0; i < n; i++) if (positionWhiteCp(i) != null) done++;
+  const pct = n ? Math.round((done / n) * 100) : 0;
+  const busy = done < n;
+  $('progress').classList.toggle('on', busy);
+  $('progressbar').style.width = pct + '%';
+  $('btn-review').textContent = busy ? `Анализ партии: ${pct}%` : 'Пересчитать анализ';
 }
 
 async function runReview() {
-  if (reviewRunning) {
-    reviewToken += 1;
-    engine.stop();
-    return;
-  }
   if (editor) { toast('Сначала закройте редактор позиции'); return; }
-  if (!G.sans.length) { toast('Сначала сделайте ходы или загрузите партию'); return; }
   if (engineState !== 'ready') { toast('Движок ещё не загружен или недоступен'); return; }
-
-  reviewRunning = true;
-  const token = ++reviewToken;
-  clearTimeout(liveTimer);
-  live = { lines: [], depth: 0 };
-  review = null;
-  renderAll();
-  setProgress(0);
-
-  const n = G.fens.length;
-  const scores = new Array(n).fill(0);
-  const second = new Array(n).fill(null);
-  const bests = new Array(n).fill(null);
-  let cancelled = false;
-  await Promise.race([bookPromise, new Promise((r) => setTimeout(r, 1500))]);
-  const sacrifice = G.ucis.map((u, i) => detectSacrifice(G.fens[i], u));
-  const bookFlags = G.ucis.map((u, i) => !!(book && G.startFen === START_FEN && book.prefixes.has(G.sans.slice(0, i + 1).join(' '))));
-  // Промежуточный итог: ходы 0..upto-1 уже разобраны, поэтому позиции 0..upto известны.
-  const partial = (upto) => buildReview({
-    scores: scores.slice(0, upto + 1),
-    second: second.slice(0, upto + 1),
-    bests: bests.slice(0, upto + 1),
-    playedUcis: G.ucis.slice(0, upto),
-    startTurn: turnOf(G.fens[0]),
-    sacrifice: sacrifice.slice(0, upto),
-    book: bookFlags.slice(0, upto),
-  });
-
-  for (let i = 0; i < n; i++) {
-    if (token !== reviewToken) { cancelled = true; break; }
-    const fen = G.fens[i];
-    const term = terminalScore(fen);
-    if (term !== null) {
-      scores[i] = term;
-    } else {
-      const lines = await engine.analyze(fen, { depth: settings.depth, multipv: 2 });
-      if (token !== reviewToken || !lines) { cancelled = true; break; }
-      if (lines.length) {
-        const turn = turnOf(fen);
-        scores[i] = lineToWhiteCp(lines[0], turn);
-        bests[i] = lines[0].pv[0] || null;
-        if (lines[1]) second[i] = lineToWhiteCp(lines[1], turn);
-      }
-    }
-    setProgress((i + 1) / n);
-    if (i >= 1 && token === reviewToken) {
-      // Обновляем счётчики и подсветку ходов по мере разбора
-      review = partial(i);
-      renderPanel();
-      renderMoves();
-    }
-  }
-
-  if (!cancelled) {
-    await Promise.race([bookPromise, new Promise((r) => setTimeout(r, 1500))]);
-    const sacrifice = G.ucis.map((u, i) => detectSacrifice(G.fens[i], u));
-    const bookFlags = G.ucis.map((u, i) => !!(book && G.startFen === START_FEN && book.prefixes.has(G.sans.slice(0, i + 1).join(' '))));
-    review = buildReview({
-      scores, second, bests, playedUcis: G.ucis, startTurn: turnOf(G.fens[0]), sacrifice, book: bookFlags,
-    });
-  }
-  reviewRunning = false;
-  setProgress(0);
-  $('progress').classList.remove('on');
-  if (cancelled) review = null;
-  renderAll();
-  requestLive();
-  if (cancelled) toast('Анализ остановлен');
+  for (const f of G.fens) EVAL.delete(f);
+  requestAnalysis();
+  toast('Анализ запущен заново');
 }
 
 /* ---------- Загрузка партий ---------- */
 function resetGame(startFen, sans, ucis, fens, headers) {
-  reviewToken += 1;
-  engine.stop();
-  reviewRunning = false;
-  setProgress(0);
-  $('progress').classList.remove('on');
   hideEditor();
   G.startFen = startFen;
   G.sans = sans;
@@ -938,9 +997,7 @@ function resetGame(startFen, sans, ucis, fens, headers) {
   G.ply = 0;
   selected = null;
   targets = [];
-  review = null;
-  renderAll();
-  requestLive();
+  requestAnalysis();
 }
 
 function loadPgnText(raw) {
@@ -1124,12 +1181,11 @@ function bindUi() {
   $('btn-flip').onclick = () => { G.flipped = !G.flipped; renderAll(); };
   $('btn-reset').onclick = () => safeLoad(() => loadFen(START_FEN));
 
-  $('depth-minus').onclick = () => { settings.depth = Math.max(6, settings.depth - 1); saveSettings(); renderEval(); requestLive(); };
-  $('depth-plus').onclick = () => { settings.depth = Math.min(24, settings.depth + 1); saveSettings(); renderEval(); requestLive(); };
+  $('depth-minus').onclick = () => { settings.depth = Math.max(6, settings.depth - 1); saveSettings(); EVAL.clear(); requestLive(); };
+  $('depth-plus').onclick = () => { settings.depth = Math.min(24, settings.depth + 1); saveSettings(); EVAL.clear(); requestLive(); };
   $('live-toggle').onclick = () => {
     settings.live = !settings.live;
     saveSettings();
-    if (!settings.live) engine.stop();
     requestLive();
   };
   $('btn-sound').onclick = () => {
@@ -1230,7 +1286,7 @@ renderAll();
 engine.init().then(() => {
   engineState = 'ready';
   renderEval();
-  requestLive();
+  requestAnalysis();
 }).catch(() => {
   engineState = 'error';
   renderEval();
