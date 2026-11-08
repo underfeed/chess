@@ -86,9 +86,9 @@ function beep(freq) {
 let noiseBuf = null;
 // Короткий сухой деревянный стук: острый контакт + быстро гаснущие тоны, без хвоста.
 const WOOD_MODES = [ // [частота Гц, громкость, затухание с]
-  [330, 0.7, 0.012],
-  [620, 0.55, 0.009],
-  [1050, 0.3, 0.006],
+  [280, 0.8, 0.014],
+  [540, 0.6, 0.01],
+  [930, 0.35, 0.007],
 ];
 
 function knock(t, strength, pitch) {
@@ -96,15 +96,20 @@ function knock(t, strength, pitch) {
   if (!noiseBuf) {
     noiseBuf = actx.createBuffer(1, Math.floor(sr * 0.02), sr);
     const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.0015));
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.004));
   }
   const master = actx.createGain();
-  master.gain.value = strength;
+  master.gain.value = strength * 0.9;
   const lp = actx.createBiquadFilter();
   lp.type = 'lowpass';
   lp.frequency.value = 2200;
   lp.Q.value = 0.4;
-  master.connect(lp);
+  const sh = actx.createWaveShaper(); // лёгкая жёсткость
+  const cv = new Float32Array(256);
+  for (let i = 0; i < 256; i++) cv[i] = Math.tanh(((i / 128) - 1) * 2.5);
+  sh.curve = cv;
+  master.connect(sh);
+  sh.connect(lp);
   lp.connect(actx.destination);
 
   // 1) контакт: очень короткий приглушённый щелчок
@@ -112,10 +117,10 @@ function knock(t, strength, pitch) {
   src.buffer = noiseBuf;
   const bp = actx.createBiquadFilter();
   bp.type = 'bandpass';
-  bp.frequency.value = 900;
-  bp.Q.value = 0.7;
+  bp.frequency.value = 700;
+  bp.Q.value = 0.5;
   const cg = actx.createGain();
-  cg.gain.value = 0.5;
+  cg.gain.value = 0.9;
   src.connect(bp);
   bp.connect(cg);
   cg.connect(master);
@@ -140,8 +145,8 @@ function knock(t, strength, pitch) {
   const o2 = actx.createOscillator();
   const g2 = actx.createGain();
   o2.type = 'sine';
-  o2.frequency.setValueAtTime(190 * pitch, t);
-  o2.frequency.exponentialRampToValueAtTime(130 * pitch, t + 0.03);
+  o2.frequency.setValueAtTime(160 * pitch, t);
+  o2.frequency.exponentialRampToValueAtTime(100 * pitch, t + 0.035);
   g2.gain.setValueAtTime(0.8, t);
   g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
   o2.connect(g2);
