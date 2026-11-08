@@ -341,7 +341,7 @@ function renderArrow() {
   const py = ux;
   // Форма стрелки: острие в точке x2,y2, хвост уходит назад к x1,y1.
   // Контур задан в локальных координатах (back — вдоль стрелки назад, lat — поперёк), симметричен.
-  const k = (len * 0.95) / 320;
+  const k = (Math.min(len, 1.5) * 0.6) / 320;
   const contour = [
     [0, 0], [61, 235], [155, 240], [0, 320], [-155, 240], [-61, 235],
   ];
@@ -349,7 +349,7 @@ function renderArrow() {
     x2 - ux * back * k + px * lat * k,
     y2 - uy * back * k + py * lat * k,
   ].join(',')).join(' ');
-  svg.innerHTML = `<polygon points="${pts}" fill="rgba(124,179,66,0.85)"></polygon>`;
+  svg.innerHTML = `<polygon points="${pts}" fill="rgba(124,179,66,0.5)"></polygon>`;
 }
 
 function onSquare(sq) {
