@@ -1,7 +1,7 @@
 // Значки категорий ходов. Рисуются SVG, поэтому всегда по центру и без засечек шрифта.
 // Все фигуры нарисованы в сетке 24×24, центр = (12, 12).
 
-const DOT = (x, y) => `<circle cx="${x}" cy="${y}" r="1.5" fill="#fff" stroke="none"/>`;
+const DOT = (x, y) => `<circle cx="${x}" cy="${y}" r="2.1" fill="#fff" stroke="none"/>`;
 // «?» с центром около x=12, без засечек: дуга плюс хвостик
 const HOOK = '<path d="M10.2 9.6 A2.8 2.8 0 1 1 13.8 12.3 C13.0 12.6 12.5 13.3 12.5 14.2 V14.8"/>';
 
@@ -19,5 +19,5 @@ const ICONS = {
 
 export function catIconSvg(key) {
   const body = ICONS[key] || '';
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 }
