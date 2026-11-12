@@ -65,6 +65,8 @@ export function fmtCp(v) {
   return (v < 0 ? '−' : '') + s;
 }
 
+const GREAT_GAP = 12; // минимальный отрыв лучшего хода от второго (п.п. шанса на победу)
+
 // Категория хода.
 // winBefore/winAfter — шанс на победу ходящей стороны до и после хода.
 // gap — насколько второй по силе ход хуже лучшего (в п.п.), либо null.
@@ -77,9 +79,10 @@ export function classifyMove({ winBefore, winAfter, isBest, isBook, gap, sacrifi
   if (sacrifice && delta < 2 && winAfter >= 40 && winBefore <= 85) return 'brilliant';
   // Жертва, ведущая к форсированному мату (лучший ход движка), — блестящий ход даже в выигранной позиции.
   if (sacrifice && forcedMate && isBest) return 'brilliant';
-  // Замечательный: единственный сильный ход (второй заметно хуже) или спасающий/переломный ход.
-  if (gap != null && delta < 2 && winBefore > 5 && winBefore < 95) {
-    if (gap >= 6) return 'great';
+  // Замечательный (строгий): это лучший ход движка, он почти не теряет оценку, а второй по силе
+  // ход хуже минимум на 12 п.п. Позиция ещё не решена: шанс на победу до хода в пределах 10–90 %.
+  if (isBest && gap != null && gap >= GREAT_GAP && delta < 1 && winBefore >= 10 && winBefore <= 90) {
+    return 'great';
   }
   if (isBest || delta < 0.3) return 'best';
   if (delta < 2) return 'excellent';
