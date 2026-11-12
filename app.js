@@ -80,88 +80,122 @@ function beep(freq) {
     o.stop(actx.currentTime + 0.09);
   } catch (e) { /* звук недоступен */ }
 }
-// Звук хода: мраморный стук. Складывается из острого щелчка контакта, звонких
-// быстро гаснущих неупругих обертонов камня и короткого глухого удара о доску.
-// Высота слегка меняется от хода к ходу, как у живой фигуры.
+// Звук хода: как будто фигуру ставят на деревянную доску.
+// Складывается из трёх частей: короткий щелчок контакта, затухающие тона дерева
+// и глухой отзвук самой доски. Тон слегка меняется от хода к ходу, как у живой фигуры.
 let noiseBuf = null;
-const MARBLE_MODES = [ // [частота Гц, громкость, затухание с]
-  [1180, 0.55, 0.030],
-  [2310, 0.45, 0.022],
-  [3470, 0.30, 0.016],
-  [5240, 0.18, 0.010],
-  [7100, 0.08, 0.006],
+// Короткий сухой деревянный стук: острый контакт + быстро гаснущие тоны, без хвоста.
+const WOOD_MODES = [ // [частота Гц, громкость, затухание с]
+  [190, 0.9, 0.014],
+  [380, 0.5, 0.01],
+  [640, 0.18, 0.006],
 ];
 
 function knock(t, strength, pitch) {
   const sr = actx.sampleRate;
   if (!noiseBuf) {
-    noiseBuf = actx.createBuffer(1, Math.floor(sr * 0.015), sr);
+    noiseBuf = actx.createBuffer(1, Math.floor(sr * 0.02), sr);
     const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.0015));
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.004));
   }
   const master = actx.createGain();
-  master.gain.value = strength * 0.45;
-  const hp = actx.createBiquadFilter(); // убираем гул, камень звонкий и сухой
-  hp.type = 'highpass';
-  hp.frequency.value = 140;
-  master.connect(hp);
-  hp.connect(actx.destination);
+  master.gain.value = strength * 0.5;
+  const lp = actx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 1100;
+  lp.Q.value = 0.4;
+  const sh = actx.createWaveShaper(); // лёгкая жёсткость
+  const cv = new Float32Array(256);
+  for (let i = 0; i < 256; i++) cv[i] = Math.tanh(((i / 128) - 1) * 2.5);
+  sh.curve = cv;
+  master.connect(sh);
+  sh.connect(lp);
+  lp.connect(actx.destination);
 
-  // 1) контакт: жёсткий короткий щелчок
+  // 1) контакт: очень короткий приглушённый щелчок
   const src = actx.createBufferSource();
   src.buffer = noiseBuf;
   const bp = actx.createBiquadFilter();
   bp.type = 'bandpass';
-  bp.frequency.value = 3500 * pitch;
-  bp.Q.value = 0.8;
+  bp.frequency.value = 450;
+  bp.Q.value = 0.5;
   const cg = actx.createGain();
-  cg.gain.value = 0.6;
+  cg.gain.value = 0.45;
   src.connect(bp);
   bp.connect(cg);
   cg.connect(master);
   src.start(t);
 
-  // 2) мрамор: звонкие тона с быстрым затуханием
-  for (const [f, a, tau] of MARBLE_MODES) {
+  // 2) дерево: гладкие тоны с очень быстрым затуханием
+  for (const [f, a, tau] of WOOD_MODES) {
     const o = actx.createOscillator();
     const g = actx.createGain();
     o.type = 'sine';
     o.frequency.value = f * pitch;
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(a, t + 0.0005);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + tau * 6);
+    g.gain.linearRampToValueAtTime(a, t + 0.0008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + tau * 5);
     o.connect(g);
     g.connect(master);
     o.start(t);
-    o.stop(t + tau * 6 + 0.01);
+    o.stop(t + tau * 5 + 0.01);
   }
 
-  // 3) удар о доску: короткий глухой толчок
+  // 3) корпус доски: короткий низкий тон
   const o2 = actx.createOscillator();
   const g2 = actx.createGain();
   o2.type = 'sine';
-  o2.frequency.setValueAtTime(260 * pitch, t);
-  o2.frequency.exponentialRampToValueAtTime(170 * pitch, t + 0.03);
-  g2.gain.setValueAtTime(0.35, t);
-  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+  o2.frequency.setValueAtTime(120 * pitch, t);
+  o2.frequency.exponentialRampToValueAtTime(75 * pitch, t + 0.04);
+  g2.gain.setValueAtTime(1.0, t);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
   o2.connect(g2);
   g2.connect(master);
   o2.start(t);
-  o2.stop(t + 0.05);
+  o2.stop(t + 0.06);
 }
 
-function marbleClack(kind) {
-  const jitter = 1 + (Math.random() - 0.5) * 0.06; // ±3% высоты
-  const t = actx.currentTime + 0.005;
-  if (kind === 'capture') {
-    knock(t, 1, 0.93 * jitter);
-    knock(t + 0.014, 0.45, 0.88 * jitter); // вторая фигура задевает первую
-  } else if (kind === 'check') {
-    knock(t, 1, 1.1 * jitter);
-    knock(t + 0.014, 0.4, 1.02 * jitter);
-  } else {
-    knock(t, 0.8, jitter);
-  }
+function woodClack(capture) {
+  if (!settings.sound) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    knock(actx.currentTime + 0.005, capture ? 1 : 0.8, capture ? 0.9 : 1);
+  } catch (e) { /* звук недоступен */ }
+}
+
+// Звук хода: файл sounds/move-self.mp3, один звук на все ходы. Если файлы не загрузились, играет синтез выше.
+const SOUND_FILES = { move: ['move-self'], capture: ['move-self'], check: ['move-self'] };
+const soundBufs = {};
+let soundLoading = false;
+async function loadSounds() {
+  if (soundLoading) return;
+  soundLoading = true;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    for (const [kind, names] of Object.entries(SOUND_FILES)) {
+      soundBufs[kind] = [];
+      for (const nm of names) {
+        const r = await fetch(`sounds/${nm}.mp3`);
+        if (!r.ok) throw new Error(nm);
+        soundBufs[kind].push(await actx.decodeAudioData(await r.arrayBuffer()));
+      }
+    }
+  } catch (e) { soundBufs.failed = true; }
+}
+
+function playSample(kind) {
+  const list = soundBufs[kind];
+  if (!list || !list.length) return false;
+  const src = actx.createBufferSource();
+  src.buffer = list[Math.floor(Math.random() * list.length)];
+  src.playbackRate.value = 1;
+  const g = actx.createGain();
+  g.gain.value = 1;
+  src.connect(g);
+  g.connect(actx.destination);
+  src.start();
+  return true;
 }
 
 // san — запись хода (например «Qxf7+»); captured — тип взятой фигуры, если известен.
@@ -170,11 +204,12 @@ function playMoveSound(san, captured) {
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     if (actx.state === 'suspended') actx.resume();
+    if (!soundBufs.move && !soundBufs.failed) loadSounds();
     const isCapture = /x/.test(san || '');
     const isCheck = /[+#]/.test(san || '');
     const queenTakes = isCapture && (captured === 'q' || /^Q/.test(san || ''));
     const kind = isCheck || queenTakes ? 'check' : isCapture ? 'capture' : 'move';
-    marbleClack(kind);
+    if (!playSample(kind)) woodClack(isCapture);
   } catch (e) { /* звук недоступен */ }
 }
 
@@ -298,6 +333,7 @@ function detectSacrificePv(fen, uci, pv) {
   } catch (e) { return false; }
 }
 
+loadSounds();
 
 /* ---------- Доска ---------- */
 function sqCenter(sq) {
