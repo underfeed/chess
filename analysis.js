@@ -5,6 +5,22 @@
 // Взяты по мотивам открытой разметки Lichess; при желании подстройте под себя.
 export const THRESHOLDS = { inaccuracy: 5, mistake: 10, blunder: 15 };
 
+// Настройки «особых» категорий. Все числа в процентных пунктах шанса на победу (0–100).
+export const SPECIAL = {
+  brilliant: {
+    maxLossBest: 0, // потеря оценки, если ход совпал с лучшим ходом движка
+    maxLossOther: 1, // допустимая потеря, если ход не лучший, но почти равноценный
+    minWinAfter: 45, // после жертвы позиция не должна быть проигранной
+    maxWinBefore: 80, // в уже выигранной позиции жертва не считается блестящей
+    minMateLength: 2, // жертва с матом в 1 — не блестящий ход (если передана длина мата)
+  },
+  great: {
+    minGap: 15, // второй по силе ход хуже лучшего минимум на столько (= уровень зевка)
+    minWinBefore: 10, // позиция ещё не безнадёжна…
+    maxWinBefore: 85, // …и ещё не выиграна
+  },
+};
+
 // Категории ходов. Названия, значки и цвета собственные.
 export const CATS = [
   { key: 'brilliant', label: 'Блестящий', sym: '!!', color: '#1fb5a0' },
@@ -20,9 +36,16 @@ export const CATS = [
 
 export const CAT_BY_KEY = Object.fromEntries(CATS.map((c) => [c.key, c]));
 
+const MATE_CP = 9000; // оценки по модулю не меньше этого значения считаются матовыми
+
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
 // Шанс на победу (0–100) по оценке в сантипешках с точки зрения одной стороны.
+// Мат — это ровно 100 / 0 (раньше мат и «+10 пешек» давали одно и то же число).
 export function winPct(cp) {
-  const c = Math.max(-1000, Math.min(1000, cp));
+  if (cp >= MATE_CP) return 100;
+  if (cp <= -MATE_CP) return 0;
+  const c = clamp(cp, -1000, 1000);
   return 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * c)) - 1);
 }
 
@@ -30,15 +53,41 @@ export function winPct(cp) {
 export function moveAccuracy(winBefore, winAfter) {
   const diff = Math.max(0, winBefore - winAfter);
   const a = 103.1668 * Math.exp(-0.04354 * diff) - 3.1669;
-  return Math.max(0, Math.min(100, a));
+  return clamp(a, 0, 100);
 }
 
-// Точность партии для одной стороны: среднее между арифметическим и гармоническим.
-export function gameAccuracy(list) {
+// Точность партии для одной стороны: среднее между (взвешенным) арифметическим и гармоническим.
+// weights необязательны: если их нет, все ходы равноценны.
+export function gameAccuracy(list, weights) {
   if (!list.length) return null;
-  const mean = list.reduce((s, x) => s + x, 0) / list.length;
+  let wsum = 0;
+  let asum = 0;
+  for (let i = 0; i < list.length; i++) {
+    const w = weights && weights[i] != null ? weights[i] : 1;
+    wsum += w;
+    asum += w * list[i];
+  }
+  const mean = asum / wsum;
   const harmonic = list.length / list.reduce((s, x) => s + 1 / Math.max(x, 1), 0);
   return (mean + harmonic) / 2;
+}
+
+// Вес каждого хода по «нервности» позиции (как у Lichess): чем сильнее прыгает оценка
+// вокруг хода, тем важнее этот ход. Ход в спокойной позиции почти не влияет на точность.
+// wp — шансы белых на победу по всем позициям (длина n + 1). Возвращает n весов.
+export function volatilityWeights(wp) {
+  const n = wp.length - 1;
+  if (n < 1) return [];
+  const size = clamp(Math.floor(wp.length / 10), 2, 8);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const start = i < size - 2 ? 0 : i - (size - 2);
+    const win = wp.slice(start, start + size);
+    const mean = win.reduce((s, x) => s + x, 0) / win.length;
+    const sd = Math.sqrt(win.reduce((s, x) => s + (x - mean) ** 2, 0) / win.length);
+    out.push(clamp(sd, 0.5, 12));
+  }
+  return out;
 }
 
 // Строка движка {cp?, mate?} (с точки зрения стороны, чей ход) -> оценка белых.
@@ -47,7 +96,8 @@ export function lineToWhiteCp(line, turn) {
   let v;
   if (line.mate != null) {
     const m = Math.min(Math.abs(line.mate), 99);
-    v = (line.mate >= 0 ? 1 : -1) * (10000 - m * 10);
+    // mate 0 значит, что ходящему уже поставили мат, то есть оценка для него отрицательная.
+    v = (line.mate > 0 ? 1 : -1) * (10000 - m * 10);
   } else {
     v = line.cp ?? 0;
   }
@@ -57,7 +107,7 @@ export function lineToWhiteCp(line, turn) {
 // Красивая запись оценки: 0.30, −1.25, M3, −M2.
 export function fmtCp(v) {
   if (v == null || Number.isNaN(v)) return '—';
-  if (Math.abs(v) >= 9000) {
+  if (Math.abs(v) >= MATE_CP) {
     const m = Math.round((10000 - Math.abs(v)) / 10);
     return (v > 0 ? '' : '−') + 'M' + m;
   }
@@ -65,25 +115,67 @@ export function fmtCp(v) {
   return (v < 0 ? '−' : '') + s;
 }
 
-const GREAT_GAP = 12; // минимальный отрыв лучшего хода от второго (п.п. шанса на победу)
+// Подходит ли «форсированный мат» для блестящего хода: либо просто true,
+// либо длина мата в ходах (тогда мат в 1 не считается).
+function mateQualifies(forcedMate) {
+  if (forcedMate === true) return true;
+  return typeof forcedMate === 'number' && forcedMate >= SPECIAL.brilliant.minMateLength;
+}
 
 // Категория хода.
-// winBefore/winAfter — шанс на победу ходящей стороны до и после хода.
-// gap — насколько второй по силе ход хуже лучшего (в п.п.), либо null.
-export function classifyMove({ winBefore, winAfter, isBest, isBook, gap, sacrifice, forcedMate }) {
+//  winBefore/winAfter — шанс на победу ходящей стороны до и после хода (0–100);
+//  isBest   — сыгран лучший ход движка;
+//  isBook   — теоретический ход;
+//  gap      — насколько второй по силе ход хуже лучшего (п.п.), либо null;
+//  sacrifice — настоящая материальная жертва (считать по линии движка, а не по одному ходу);
+//  forcedMate — после хода есть форсированный мат: true или длина мата в ходах;
+//  obvious  — ход очевиден: взятие в ответ на взятие, бесплатное взятие фигуры,
+//             единственный ответ на шах и т. п. Такие ходы не бывают «замечательными» и «блестящими»;
+//  legalMoves — число легальных ходов в позиции (при 1 выбора не было вообще).
+export function classifyMove({
+  winBefore,
+  winAfter,
+  isBest,
+  isBook,
+  gap,
+  sacrifice,
+  forcedMate,
+  obvious,
+  legalMoves,
+}) {
   if (isBook) return 'book';
-  const delta = Math.max(0, winBefore - winAfter);
+
+  // Лучший ход движка не может быть ошибкой: разница оценок до и после — это шум
+  // двух независимых поисков, а не качество хода.
+  const delta = isBest ? 0 : Math.max(0, winBefore - winAfter);
+
   if (delta >= THRESHOLDS.blunder) return 'blunder';
   if (delta >= THRESHOLDS.mistake) return 'mistake';
   if (delta >= THRESHOLDS.inaccuracy) return 'inaccuracy';
-  if (sacrifice && delta < 2 && winAfter >= 40 && winBefore <= 85) return 'brilliant';
-  // Жертва, ведущая к форсированному мату (лучший ход движка), — блестящий ход даже в выигранной позиции.
-  if (sacrifice && forcedMate && isBest) return 'brilliant';
-  // Замечательный (строгий): это лучший ход движка, он почти не теряет оценку, а второй по силе
-  // ход хуже минимум на 12 п.п. Позиция ещё не решена: шанс на победу до хода в пределах 10–90 %.
-  if (isBest && gap != null && gap >= GREAT_GAP && delta < 1 && winBefore >= 10 && winBefore <= 90) {
-    return 'great';
+
+  // Очевидные ходы и ходы без выбора не получают особых отметок.
+  const trivial = !!obvious || (legalMoves != null && legalMoves <= 1);
+
+  if (!trivial && sacrifice) {
+    const B = SPECIAL.brilliant;
+    const maxLoss = isBest ? B.maxLossBest : B.maxLossOther;
+    // Обычный блестящий ход: жертва, которая почти ничего не стоит по оценке,
+    // не оставляет проигранной позицию и сделана не в уже выигранной партии.
+    if (delta <= maxLoss && winAfter >= B.minWinAfter && winBefore <= B.maxWinBefore) {
+      return 'brilliant';
+    }
+    // Жертва, ведущая к форсированному мату (лучший ход), — блестящая даже в выигранной позиции.
+    if (isBest && mateQualifies(forcedMate)) return 'brilliant';
   }
+
+  // Замечательный: лучший ход, а любой другой был бы зевком. Позиция ещё не решена.
+  if (!trivial && isBest && gap != null) {
+    const G = SPECIAL.great;
+    if (gap >= G.minGap && winBefore >= G.minWinBefore && winBefore <= G.maxWinBefore) {
+      return 'great';
+    }
+  }
+
   if (isBest || delta < 0.3) return 'best';
   if (delta < 2) return 'excellent';
   return 'good';
@@ -101,12 +193,28 @@ function emptyCounts() {
 //  bests[i]   — лучший ход движка (uci) в позиции i;
 //  playedUcis — сыгранные ходы (uci);
 //  startTurn  — 'w' или 'b' в начальной позиции;
-//  sacrifice[i], book[i] — булевы флаги для хода i.
-export function buildReview({ scores, second, bests, playedUcis, startTurn, sacrifice, book, mates }) {
+//  sacrifice[i], book[i] — булевы флаги для хода i;
+//  mates[i]   — (необязательно) форсированный мат после хода i: true или длина мата;
+//  obvious[i] — (необязательно) ход очевиден (взятие в ответ, бесплатное взятие…);
+//  legalMoves[i] — (необязательно) число легальных ходов в позиции i.
+export function buildReview({
+  scores,
+  second,
+  bests,
+  playedUcis,
+  startTurn,
+  sacrifice,
+  book,
+  mates,
+  obvious,
+  legalMoves,
+}) {
   const n = playedUcis.length;
   const moves = [];
   const acc = { w: [], b: [] };
+  const wts = { w: [], b: [] };
   const counts = { w: emptyCounts(), b: emptyCounts() };
+  const weights = volatilityWeights(scores.slice(0, n + 1).map((s) => winPct(s)));
   for (let i = 0; i < n; i++) {
     const color = (startTurn === 'w') === (i % 2 === 0) ? 'w' : 'b';
     const sign = color === 'w' ? 1 : -1;
@@ -121,17 +229,29 @@ export function buildReview({ scores, second, bests, playedUcis, startTurn, sacr
       isBook: !!(book && book[i]),
       gap,
       sacrifice: !!(sacrifice && sacrifice[i]),
-      forcedMate: !!(mates && mates[i]),
+      forcedMate: mates ? mates[i] : null,
+      obvious: !!(obvious && obvious[i]),
+      legalMoves: legalMoves ? legalMoves[i] : null,
     });
-    const a = moveAccuracy(winBefore, winAfter);
+    // Для точности тоже не штрафуем лучший ход за шум между поисками.
+    const a = isBest ? 100 : moveAccuracy(winBefore, winAfter);
     acc[color].push(a);
+    wts[color].push(weights[i] ?? 1);
     counts[color][cat] += 1;
-    moves.push({ ply: i + 1, color, cat, winBefore, winAfter, delta: Math.max(0, winBefore - winAfter), acc: a });
+    moves.push({
+      ply: i + 1,
+      color,
+      cat,
+      winBefore,
+      winAfter,
+      delta: isBest ? 0 : Math.max(0, winBefore - winAfter),
+      acc: a,
+    });
   }
   return {
     moves,
     counts,
-    accuracy: { w: gameAccuracy(acc.w), b: gameAccuracy(acc.b) },
+    accuracy: { w: gameAccuracy(acc.w, wts.w), b: gameAccuracy(acc.b, wts.b) },
     scores,
     bests,
   };
