@@ -185,8 +185,14 @@ button.primary { background: var(--accent); color: #10200a; font-weight: 600; }
 .actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .actions .wide { grid-column: 1 / -1; }
 .btn-outline { background: transparent; border: 2px solid #2f7a3c; color: var(--text); font-weight: 600; }
-#progress { height: 6px; border-radius: 3px; background: var(--card2); overflow: hidden; display: none; }
-#progress.on { display: block; }
+/* Прогресс разбора: над доской, чтобы был виден и на телефоне */
+#progress {
+  display: none; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; background: var(--card);
+}
+#progress.on { display: flex; }
+#progresslabel { font-size: 13px; font-weight: 600; white-space: nowrap; }
+#progresstrack { flex: 1; height: 6px; border-radius: 3px; background: var(--card2); overflow: hidden; }
 #progressbar { height: 100%; width: 0; background: var(--accent); transition: width 0.15s; }
 
 /* График */

@@ -43,9 +43,18 @@ document.addEventListener('click', (e) => {
 });
 
 /* ---------- Настройки ---------- */
-const DEFAULTS = { depth: 14, sound: true, live: true };
+// Глубина 8: разбор партии на телефоне идёт заметно быстрее, точности для
+// оценки ходов хватает. Кто хочет строже — поднимает кнопкой «+».
+const DEFAULTS = { depth: 8, sound: true, live: true };
 const settings = (() => {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('chess-settings') || '{}') }; } catch (e) { return { ...DEFAULTS }; }
+  try {
+    const s = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('chess-settings') || '{}') };
+    // Раньше по умолчанию стояла глубина 14. У тех, кто её не трогал, меняем
+    // на новую; выбранную вручную глубину не перебиваем.
+    if (!s.depthChosen && s.depth === 14) s.depth = 8;
+    s.depthChosen = true;
+    return s;
+  } catch (e) { return { ...DEFAULTS }; }
 })();
 function saveSettings() {
   try { localStorage.setItem('chess-settings', JSON.stringify(settings)); } catch (e) { /* ничего страшного */ }
@@ -1131,9 +1140,12 @@ function setProgress() {
   for (let i = 0; i < n; i++) if (positionWhiteCp(i) != null) done++;
   const pct = n ? Math.round((done / n) * 100) : 0;
   const busy = done < n;
+  // Процент и полоса живут над доской: на телефоне панель уезжает вниз,
+  // и там прогресс было не видно.
   $('progress').classList.toggle('on', busy);
   $('progressbar').style.width = pct + '%';
-  $('btn-review').textContent = busy ? `Анализ партии: ${pct}%` : 'Пересчитать анализ';
+  $('progresslabel').textContent = `Анализ партии: ${pct}%`;
+  $('btn-review').textContent = busy ? 'Анализ партии' : 'Пересчитать анализ';
 }
 
 async function runReview() {
