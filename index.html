@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Шахматный анализатор</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -13,7 +13,7 @@
   <div id="gameinfo"></div>
 
   <!-- Прогресс разбора держим над доской: на телефоне панель уезжает вниз. -->
-  <div id="progress" aria-live="polite">
+  <div id="progress" aria-live="polite" style="min-height: 33px; overflow: visible">
     <span id="progresslabel">Анализ партии: 0%</span>
     <div id="progresstrack"><div id="progressbar"></div></div>
   </div>
@@ -159,6 +159,6 @@
 <div id="promo"><div class="box" id="promo-box"></div></div>
 <div id="toast"></div>
 
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=3"></script>
 </body>
 </html>

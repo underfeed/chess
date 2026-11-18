@@ -1140,9 +1140,9 @@ function setProgress() {
   for (let i = 0; i < n; i++) if (positionWhiteCp(i) != null) done++;
   const pct = n ? Math.round((done / n) * 100) : 0;
   const busy = done < n;
-  // Процент и полоса живут над доской: на телефоне панель уезжает вниз,
-  // и там прогресс было не видно.
-  $('progress').classList.toggle('on', busy);
+  // Панель показываем, как только загружена партия, и не прячем после 100%:
+  // на глубине 8 разбор заканчивается почти сразу, и панель успевала исчезнуть.
+  $('progress').classList.toggle('on', G.sans.length > 0);
   $('progressbar').style.width = pct + '%';
   $('progresslabel').textContent = `Анализ партии: ${pct}%`;
   $('btn-review').textContent = busy ? 'Анализ партии' : 'Пересчитать анализ';

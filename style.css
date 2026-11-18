@@ -189,6 +189,8 @@ button.primary { background: var(--accent); color: #10200a; font-weight: 600; }
 #progress {
   display: none; align-items: center; gap: 10px;
   padding: 8px 10px; border-radius: 8px; background: var(--card);
+  position: sticky; top: 4px; z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 #progress.on { display: flex; }
 #progresslabel { font-size: 13px; font-weight: 600; white-space: nowrap; }
