@@ -563,6 +563,8 @@ function makeMove(from, to, promotion) {
   targets = [];
   renderAll();
   requestLive();
+  // После второго хода — рекламная пауза. Дальше не чаще раза в 3 минуты.
+  maybeAdAfterMove();
 }
 
 function goTo(ply) {
@@ -1148,9 +1150,61 @@ function setProgress() {
   $('btn-review').textContent = busy ? 'Анализ партии' : 'Пересчитать анализ';
 }
 
+/* ---------- Реклама (AdsGram) ---------- */
+const AD_BLOCK_ID = 'int-80505';
+const AD_MIN_GAP = 3 * 60 * 1000; // не чаще одного показа в 3 минуты
+let adUnit = null;
+let adAfterSecondMove = false; // реклама после второго хода — один раз за партию
+
+function getAdUnit() {
+  if (adUnit) return adUnit;
+  try {
+    if (window.Adsgram && AD_BLOCK_ID) adUnit = window.Adsgram.init({ blockId: AD_BLOCK_ID });
+  } catch (e) { adUnit = null; }
+  return adUnit;
+}
+
+function adAllowed() {
+  try {
+    const last = Number(localStorage.getItem('chess-ad-at') || 0);
+    return Date.now() - last >= AD_MIN_GAP;
+  } catch (e) { return true; }
+}
+
+// Полноэкранная реклама перед разбором. Показываем только внутри Telegram:
+// в обычном браузере площадка не работает. Любая ошибка или отсутствие
+// рекламы не должны мешать анализу — просто идём дальше.
+async function showInterstitial() {
+  if (!inTelegram) return;
+  const unit = getAdUnit();
+  if (!unit || !adAllowed()) return;
+  try { localStorage.setItem('chess-ad-at', String(Date.now())); } catch (e) { /* ничего */ }
+  try {
+    await Promise.race([
+      unit.show(),
+      new Promise((_, fail) => setTimeout(() => fail(new Error('timeout')), 15000)),
+    ]);
+  } catch (e) { /* показа нет — продолжаем разбор */ }
+}
+
+// Второй ход на доске — естественная пауза, показываем рекламу один раз
+// за партию. Повторные показы ограничены общим лимитом в 3 минуты.
+function maybeAdAfterMove() {
+  if (adAfterSecondMove || G.sans.length !== 2) return;
+  adAfterSecondMove = true;
+  showInterstitial();
+}
+
 async function runReview() {
   if (editor) { toast('Сначала закройте редактор позиции'); return; }
   if (engineState !== 'ready') { toast('Движок ещё не загружен или недоступен'); return; }
+  // Реклама — только по явному нажатию и не на пустой доске.
+  if (G.sans.length) {
+    const btn = $('btn-review');
+    btn.disabled = true;
+    await showInterstitial();
+    btn.disabled = false;
+  }
   for (const f of G.fens) EVAL.delete(f);
   requestAnalysis();
   toast('Анализ запущен заново');
@@ -1167,6 +1221,7 @@ function resetGame(startFen, sans, ucis, fens, headers) {
   G.ply = 0;
   selected = null;
   targets = [];
+  adAfterSecondMove = false;
   requestAnalysis();
 }
 
