@@ -79,6 +79,9 @@ export function gameAccuracy(list, weights) {
 // вокруг хода, тем важнее этот ход. Ход в спокойной позиции почти не влияет на точность.
 // wp — шансы белых на победу по всем позициям (длина n + 1). Возвращает n весов.
 // Окно: число ходов / 10, от 2 до 8 (как в lila AccuracyPercent).
+// null в wp — позиция ещё не разобрана: такие значения выпадают из окна, а если
+// в окне осталось меньше двух позиций, вес нейтральный (1). Когда партия разобрана
+// целиком, результат совпадает с прежним.
 export function volatilityWeights(wp) {
   const n = wp.length - 1;
   if (n < 1) return [];
@@ -86,7 +89,8 @@ export function volatilityWeights(wp) {
   const out = [];
   for (let i = 0; i < n; i++) {
     const start = i < size - 2 ? 0 : i - (size - 2);
-    const win = wp.slice(start, start + size);
+    const win = wp.slice(start, start + size).filter((x) => x != null);
+    if (win.length < 2) { out.push(1); continue; }
     const mean = win.reduce((s, x) => s + x, 0) / win.length;
     const sd = Math.sqrt(win.reduce((s, x) => s + (x - mean) ** 2, 0) / win.length);
     out.push(clamp(sd, 0.5, 12));

@@ -1,7 +1,7 @@
 import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1/+esm';
 import {
   CATS, CAT_BY_KEY, winPct, lineToWhiteCp, fmtCp, buildReview, buildBook, openingName,
-  boardToFen, boardProblem, gameAccuracy,
+  boardToFen, boardProblem, gameAccuracy, volatilityWeights,
 } from './analysis.js';
 import { Engine } from './engine.js';
 import { pieceSvg } from './pieces.js';
@@ -683,13 +683,28 @@ function buildLiveReview() {
   }
   const moves = [];
   const acc = { w: [], b: [] };
+  const wts = { w: [], b: [] };
   const counts = { w: zeroCounts(), b: zeroCounts() };
+  // Вес хода — по «нервности» позиции вокруг него, как в Lichess: ход в спокойной
+  // партии почти не влияет на точность, ход в обострении влияет сильно.
+  // Неразобранные позиции веса не портят, поэтому считаем на каждом обновлении.
+  const weights = volatilityWeights(scores.map((s) => (s == null ? null : winPct(s))));
   for (let j = 0; j < G.ucis.length; j++) {
     const m = moveInfo(j);
     moves.push(m);
-    if (m) { acc[m.color].push(m.acc); counts[m.color][m.cat] += 1; }
+    if (m) {
+      acc[m.color].push(m.acc);
+      wts[m.color].push(weights[j] ?? 1);
+      counts[m.color][m.cat] += 1;
+    }
   }
-  return { moves, counts, accuracy: { w: gameAccuracy(acc.w), b: gameAccuracy(acc.b) }, scores, bests };
+  return {
+    moves,
+    counts,
+    accuracy: { w: gameAccuracy(acc.w, wts.w), b: gameAccuracy(acc.b, wts.b) },
+    scores,
+    bests,
+  };
 }
 
 // Перезапуск фонового анализа при любом изменении позиции.
