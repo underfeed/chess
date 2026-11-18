@@ -1151,7 +1151,7 @@ function setProgress() {
 }
 
 /* ---------- Реклама (AdsGram) ---------- */
-const AD_BLOCK_ID = 'int-80505';
+const AD_BLOCK_ID = 'int-60505';
 const AD_MIN_GAP = 3 * 60 * 1000; // не чаще одного показа в 3 минуты
 let adUnit = null;
 let adAfterSecondMove = false; // реклама после второго хода — один раз за партию
