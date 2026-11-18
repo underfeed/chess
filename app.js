@@ -20,8 +20,27 @@ try {
     tg.expand();
     if (tg.setHeaderColor) tg.setHeaderColor('#262522');
     if (tg.setBackgroundColor) tg.setBackgroundColor('#262522');
+    // Свайп по доске не должен закрывать Mini App, пока тащишь фигуру.
+    if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
   }
 } catch (e) { /* вне Telegram приложение тоже работает */ }
+
+// Внешние адреса в Mini App открываются только через openLink: обычный переход
+// по ссылке в мобильном клиенте не сработает. В браузере — новая вкладка.
+// platform === 'unknown' значит, что страница открыта вне Telegram.
+const inTelegram = !!(tg && tg.platform && tg.platform !== 'unknown');
+function openExternal(url) {
+  if (inTelegram && tg.openLink) tg.openLink(url);
+  else window.open(url, '_blank', 'noopener');
+}
+
+// Ссылки в разметке (спонсор, канал, документация) ведём через openExternal.
+document.addEventListener('click', (e) => {
+  const a = e.target && e.target.closest ? e.target.closest('a[href^="http"]') : null;
+  if (!a) return;
+  e.preventDefault();
+  openExternal(a.href);
+});
 
 /* ---------- Настройки ---------- */
 const DEFAULTS = { depth: 14, sound: true, live: true };
