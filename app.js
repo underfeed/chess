@@ -47,7 +47,7 @@ let drag = null; // перетаскивание фигуры: {sq, from, piece,
 const EVAL = new Map(); // fen -> {lines, multi}: результат движка по каждой позиции
 let loopBusy = false;  // идёт ли фоновый анализ
 let loopAgain = false; // позиция сменилась, нужно начать заново
-let sacMemo = { key: '', sac: [], book: [] };
+let sacMemo = { key: '', sac: [], book: [], obvious: [], legal: [] };
 const engine = new Engine();
 
 const cur = () => new Chess(G.fens[G.ply]);
@@ -304,6 +304,36 @@ function detectSacrifice(fen, uci) {
     const net = gain + (defended ? cheapest : 0) - PIECE_VAL[piece.type];
     return net <= -2;
   } catch (e) { return false; }
+}
+
+// Факты о ходе, нужные для классификации: сколько было выбора и был ли ход очевидным.
+// Очевидный ход не должен получать «замечательный» или «блестящий»: выбор был навязан
+// позицией, а не найден игроком. Очевидные случаи:
+//  - единственный легальный ход (в том числе единственный ответ на шах);
+//  - взятие в ответ на взятие (рекапча): соперник только что взял на этом же поле;
+//  - бесплатное взятие: забрали фигуру, и отобрать её нечем.
+function moveFacts(fen, uci, prevUci, prevSan) {
+  try {
+    const c = new Chess(fen);
+    const moves = c.moves({ verbose: true });
+    const legal = moves.length;
+    const from = uci.slice(0, 2);
+    const to = uci.slice(2, 4);
+    const m = moves.find((x) => x.from === from && x.to === to);
+    if (!m) return { legal, obvious: legal <= 1 };
+    if (legal <= 1) return { legal, obvious: true };
+    if (m.captured && prevUci && prevSan && prevSan.includes('x') && prevUci.slice(2, 4) === to) {
+      return { legal, obvious: true };
+    }
+    if (m.captured) {
+      const enemy = c.turn() === 'w' ? 'b' : 'w';
+      c.move({ from, to, promotion: m.promotion });
+      if (!c.isAttacked(to, enemy)) return { legal, obvious: true };
+    }
+    return { legal, obvious: false };
+  } catch (e) {
+    return { legal: null, obvious: false };
+  }
 }
 
 // Жертва по линии движка: после хода и ~4 полуходов лучшей игры материал ходящего
@@ -645,7 +675,18 @@ function gameFlags() {
   if (sacMemo.key !== key) {
     const sac = G.ucis.map((u, i) => detectSacrifice(G.fens[i], u));
     const bk = G.ucis.map((u, i) => !!(book && G.startFen === START_FEN && book.prefixes.has(G.sans.slice(0, i + 1).join(' '))));
-    sacMemo = { key, sac, book: bk };
+    // Очевидность и число легальных ходов зависят только от партии, поэтому считаем
+    // их один раз вместе с жертвами, а не на каждое обновление панели.
+    const facts = G.ucis.map((u, i) => moveFacts(
+      G.fens[i], u,
+      i > 0 ? G.ucis[i - 1] : null,
+      i > 0 ? G.sans[i - 1] : null,
+    ));
+    sacMemo = {
+      key, sac, book: bk,
+      obvious: facts.map((f) => f.obvious),
+      legal: facts.map((f) => f.legal),
+    };
   }
   return sacMemo;
 }
@@ -667,6 +708,7 @@ function moveInfo(j) {
     scores: [s0, s1], second, bests, playedUcis: [G.ucis[j]], startTurn: turn,
     mates: [!!(c0 && !isTerm && c0.lines[0].mate != null && c0.lines[0].mate > 0)],
     sacrifice: [f.sac[j] || detectSacrificePv(f0, G.ucis[j], (EVAL.get(G.fens[j + 1]) || { lines: [] }).lines[0] && EVAL.get(G.fens[j + 1]).lines[0].pv)], book: [f.book[j]],
+    obvious: [f.obvious[j]], legalMoves: [f.legal[j]],
   });
   return r.moves[0];
 }
