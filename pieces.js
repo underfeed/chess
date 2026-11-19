@@ -1,27 +1,47 @@
-// Набор фигур: гладкие симметричные силуэты (кроме коня), объём только мягкими тенями.
+// Набор фигур: гладкие симметричные силуэты (кроме коня).
 // Рисуется в SVG, сетка 45×45, вертикальная ось симметрии x = 22.5.
-// Внутри фигур нет линий: форма = один силуэт + градиенты.
+// Как в примере: мягкий серп-тень по правому краю внутри силуэта
+// (свет слева), спокойная заливка и аккуратная обводка.
 
 let uid = 0;
 
+// Прожилки для «мрамора»: общие для всех фигур, обрезаются по силуэту.
+const VEINS = [
+  'M3 36 C 11 33, 14 26, 12.5 18 C 11 11, 15 5, 21 2',
+  'M27 44 C 24 36, 28 29, 33.5 26 C 38 23, 39 18, 36 13',
+  'M8 15 C 14 17.5, 21 15.5, 26 10',
+];
+
 const PAL = {
   w: {
-    stops: ['#ffffff', '#ebe8de', '#b9b5a8'],
-    edge: '#5a5852',
-    detail: '#5f5d56',
-    shade: '#2a2517',
-    shadeOpacity: 0.3,
-    vein: '#8f8a7d',
-    veinOpacity: 0.38,
+    // Светлые: белая заливка, серый серп-тень справа, серая обводка.
+    stops: ['#ffffff', '#fdfcf8', '#f4f1e9'],
+    edge: '#4a4a4a',
+    edgeWidth: 3, // толщина контура под заливкой: наружу выходит половина
+    detail: '#3f3f3f',
+    inner: '#c8c5bc',
+    innerOpacity: 1,
+    innerShift: 2.4,
+    innerDrop: 0.4,
+    innerBlur: 1.2,
+    vein: '#b8b2a5',
+    veinOpacity: 0.32,
+    veinWidth: 0.65,
   },
   b: {
-    stops: ['#4a4745', '#222020', '#080807'],
-    edge: '#050505',
-    detail: '#d8d4cb',
-    shade: '#000000',
-    shadeOpacity: 0.5,
-    vein: '#9a958c',
-    veinOpacity: 0.14,
+    // Тёмные: графит, тёмный серп-тень справа, почти чёрная обводка.
+    stops: ['#4f4e4b', '#4a4946', '#454441'],
+    edge: '#1c1b1a',
+    edgeWidth: 2.8,
+    detail: '#f2efe8',
+    inner: '#232120',
+    innerOpacity: 1,
+    innerShift: 2.4,
+    innerDrop: 0.4,
+    innerBlur: 1.2,
+    vein: '#8b867e',
+    veinOpacity: 0.3,
+    veinWidth: 0.65,
   },
 };
 
@@ -134,20 +154,29 @@ export function pieceSvg(type, color) {
   const s = (SHAPES[type] || SHAPES.p)();
   const id = 'pc' + (++uid); // уникальные id: иначе градиенты ломаются, если первый svg скрыт
   const stops = p.stops
-    .map((c, i) => `<stop offset="${[0, 0.55, 1][i]}" stop-color="${c}"/>`)
+    .map((c, i) => `<stop offset="${[0, 0.5, 1][i]}" stop-color="${c}"/>`)
     .join('');
+  // Серп-тень как в примере: копия силуэта, сдвинутая влево, вычитается из него же —
+  // остаётся мягкая полоса вдоль правого края внутри фигуры (свет слева).
   return `<svg viewBox="2.6 0.9 39.8 40.6" aria-hidden="true"><defs>`
-    + `<linearGradient id="${id}f" gradientUnits="userSpaceOnUse" x1="9" y1="0" x2="36" y2="0">${stops}</linearGradient>`
-    + `<linearGradient id="${id}s" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="40">`
-    + `<stop offset="0" stop-color="${p.shade}" stop-opacity="0"/><stop offset="1" stop-color="${p.shade}" stop-opacity="${p.shadeOpacity}"/></linearGradient>`
+    + `<linearGradient id="${id}f" gradientUnits="userSpaceOnUse" x1="22.5" y1="2" x2="22.5" y2="41">${stops}</linearGradient>`
+    + `<filter id="${id}i" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">`
+    + `<feOffset in="SourceAlpha" dx="-${p.innerShift}" dy="${p.innerDrop}" result="o"/>`
+    + `<feGaussianBlur in="o" stdDeviation="${p.innerBlur}" result="b"/>`
+    + `<feComposite in="SourceAlpha" in2="b" operator="out" result="r"/>`
+    + `<feFlood flood-color="${p.inner}" flood-opacity="${p.innerOpacity}" result="c"/>`
+    + `<feComposite in="c" in2="r" operator="in"/></filter>`
+    // Мраморные прожилки: пара тонких мягких линий, обрезанных по силуэту.
     + `<clipPath id="${id}c">${s.shapes}</clipPath>`
-    + `<radialGradient id="${id}v1" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="${p.vein}" stop-opacity="${p.veinOpacity}"/><stop offset="1" stop-color="${p.vein}" stop-opacity="0"/></radialGradient>`
-    + `<radialGradient id="${id}v2" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="${p.vein}" stop-opacity="${p.veinOpacity}"/><stop offset="1" stop-color="${p.vein}" stop-opacity="0"/></radialGradient></defs>`
+    + `<filter id="${id}v" x="-10%" y="-10%" width="120%" height="120%">`
+    + `<feGaussianBlur stdDeviation="0.35"/></filter></defs>`
     // контур одним слоем под заливкой: внутри фигуры линий не остаётся
-    + `<g fill="${p.edge}" stroke="${p.edge}" stroke-width="1.5" stroke-linejoin="round">${s.shapes}</g>`
+    + `<g fill="${p.edge}" stroke="${p.edge}" stroke-width="${p.edgeWidth}" stroke-linejoin="round" stroke-linecap="round">${s.shapes}</g>`
     + `<g fill="url(#${id}f)">${s.shapes}</g>`
-    + `<g clip-path="url(#${id}c)"><rect x="0" y="0" width="45" height="45" fill="url(#${id}s)"/>`
-    + `<ellipse cx="15" cy="23" rx="9" ry="5" fill="url(#${id}v1)"/><ellipse cx="31" cy="30" rx="8" ry="6" fill="url(#${id}v2)"/></g>`
-    + (s.details ? `<g fill="${p.detail}" stroke="${p.detail}" stroke-width="1.1" stroke-linecap="round">${s.details}</g>` : '')
+    + `<g clip-path="url(#${id}c)" filter="url(#${id}v)" fill="none" stroke="${p.vein}" stroke-width="${p.veinWidth}" stroke-linecap="round" opacity="${p.veinOpacity}">`
+    + VEINS.map((d) => `<path d="${d}"/>`).join('')
+    + `</g>`
+    + `<g filter="url(#${id}i)">${s.shapes}</g>`
+    + (s.details ? `<g fill="${p.detail}" stroke="${p.detail}" stroke-width="1.6" stroke-linecap="round">${s.details}</g>` : '')
     + `</svg>`;
 }

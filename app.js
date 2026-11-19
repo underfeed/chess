@@ -4,7 +4,7 @@ import {
   boardToFen, boardProblem, gameAccuracy, volatilityWeights,
 } from './analysis.js';
 import { Engine } from './engine.js';
-import { pieceSvg } from './pieces.js';
+import { pieceSvg } from './pieces.js?v=5';
 import { catIconSvg } from './icons.js';
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -1195,19 +1195,16 @@ function maybeAdAfterMove() {
   showInterstitial();
 }
 
-async function runReview() {
+function runReview() {
   if (editor) { toast('Сначала закройте редактор позиции'); return; }
   if (engineState !== 'ready') { toast('Движок ещё не загружен или недоступен'); return; }
-  // Реклама — только по явному нажатию и не на пустой доске.
-  if (G.sans.length) {
-    const btn = $('btn-review');
-    btn.disabled = true;
-    await showInterstitial();
-    btn.disabled = false;
-  }
   for (const f of G.fens) EVAL.delete(f);
+  // Разбор стартует сразу и не зависит от рекламы: показ идёт параллельно.
   requestAnalysis();
   toast('Анализ запущен заново');
+  // Интерстишиал только по нажатию пользователя и не чаще общего лимита;
+  // ошибка или отсутствие рекламы на разбор не влияют.
+  if (G.sans.length) showInterstitial();
 }
 
 /* ---------- Загрузка партий ---------- */
