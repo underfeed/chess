@@ -1,4 +1,4 @@
-import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1/+esm';
+import { Chess } from './vendor/chess.js';
 import {
   CATS, CAT_BY_KEY, winPct, lineToWhiteCp, fmtCp, buildReview, buildBook, openingName,
   boardToFen, boardProblem, gameAccuracy, volatilityWeights,
@@ -1494,7 +1494,7 @@ function bindUi() {
 }
 
 /* ---------- Запуск ---------- */
-const BOOK_BASE = 'https://raw.githubusercontent.com/lichess-org/chess-openings/master/';
+const BOOK_BASE = './vendor/book/';
 const bookPromise = Promise.all(['a', 'b', 'c', 'd', 'e'].map((l) => fetch(`${BOOK_BASE}${l}.tsv`).then((r) => {
   if (!r.ok) throw new Error('book');
   return r.text();
